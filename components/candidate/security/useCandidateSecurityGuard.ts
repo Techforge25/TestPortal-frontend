@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { logCandidateViolation } from "@/components/admin/lib/backendApi";
 import { readRuntimeState, saveRuntimeState } from "@/components/candidate/security/runtimeStore";
 
@@ -78,6 +79,8 @@ export function useCandidateSecurityGuard({
   security,
   onAutoSubmit,
 }: UseCandidateSecurityGuardArgs) {
+  const pathname = usePathname();
+  const isExamRoute = pathname === "/candidate/test" || pathname === "/candidate/tasks";
   const warningLimit = useMemo(() => security.warningLimit || 2, [security.warningLimit]);
   const initialRuntime = submissionId ? readRuntimeState(submissionId) : null;
   const [deadlineAt] = useState(() => {
@@ -128,6 +131,7 @@ export function useCandidateSecurityGuard({
   }, [candidateSessionToken, submissionId, triggerAutoSubmit, warningLimit]);
 
   useEffect(() => {
+    if (!isExamRoute) return;
     if (!submissionId) return;
     const existing = readRuntimeState(submissionId);
     if (!existing?.deadlineAt) {
@@ -137,18 +141,20 @@ export function useCandidateSecurityGuard({
         warningCount: 0,
       });
     }
-  }, [durationMinutes, submissionId]);
+  }, [durationMinutes, isExamRoute, submissionId]);
 
   useEffect(() => {
+    if (!isExamRoute) return;
     if (!deadlineAt) return;
     const timeoutMs = Math.max(0, deadlineAt - Date.now());
     const timeout = window.setTimeout(() => {
       void triggerAutoSubmit("time_expired");
     }, timeoutMs);
     return () => window.clearTimeout(timeout);
-  }, [deadlineAt, triggerAutoSubmit]);
+  }, [deadlineAt, isExamRoute, triggerAutoSubmit]);
 
   useEffect(() => {
+    if (!isExamRoute) return;
     if (!submissionId) return;
     if (!security.disableTabSwitch) return;
     const onVisibilityChange = () => {
@@ -162,9 +168,10 @@ export function useCandidateSecurityGuard({
     };
     window.addEventListener("visibilitychange", onVisibilityChange);
     return () => window.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [emitViolation, security.autoEndOnTabChange, security.disableTabSwitch, submissionId, triggerAutoSubmit]);
+  }, [emitViolation, isExamRoute, security.autoEndOnTabChange, security.disableTabSwitch, submissionId, triggerAutoSubmit]);
 
   useEffect(() => {
+    if (!isExamRoute) return;
     if (!submissionId) return;
     if (!security.disableRightClick) return;
     const onContextMenu = (event: MouseEvent) => {
@@ -173,9 +180,10 @@ export function useCandidateSecurityGuard({
     };
     window.addEventListener("contextmenu", onContextMenu);
     return () => window.removeEventListener("contextmenu", onContextMenu);
-  }, [emitViolation, security.disableRightClick, submissionId]);
+  }, [emitViolation, isExamRoute, security.disableRightClick, submissionId]);
 
   useEffect(() => {
+    if (!isExamRoute) return;
     if (!submissionId) return;
     if (!security.disableCopyPaste) return;
     const preventClipboard = (event: Event) => {
@@ -199,9 +207,10 @@ export function useCandidateSecurityGuard({
       window.removeEventListener("cut", preventClipboard);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [emitViolation, security.disableCopyPaste, submissionId]);
+  }, [emitViolation, isExamRoute, security.disableCopyPaste, submissionId]);
 
   useEffect(() => {
+    if (!isExamRoute) return;
     if (!submissionId) return;
     if (!security.detectDevTools) return;
     let devtoolsWasOpen = false;
@@ -218,9 +227,10 @@ export function useCandidateSecurityGuard({
       }
     }, 1500);
     return () => window.clearInterval(interval);
-  }, [emitViolation, security.detectDevTools, submissionId]);
+  }, [emitViolation, isExamRoute, security.detectDevTools, submissionId]);
 
   useEffect(() => {
+    if (!isExamRoute) return;
     if (!submissionId) return;
     if (!security.forceFullscreen) return;
 
@@ -244,7 +254,7 @@ export function useCandidateSecurityGuard({
 
     window.addEventListener("fullscreenchange", onFullscreenChange);
     return () => window.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, [emitViolation, security.forceFullscreen, submissionId]);
+  }, [emitViolation, isExamRoute, security.forceFullscreen, submissionId]);
 
   return {
     deadlineAt,
