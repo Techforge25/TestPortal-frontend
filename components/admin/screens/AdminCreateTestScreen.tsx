@@ -151,6 +151,7 @@ function QuestionBlock({
   options,
   selectedIndex,
   marks = "1",
+  onPromptChange,
   onDelete,
   onSelectOption,
   onOptionChange,
@@ -161,6 +162,7 @@ function QuestionBlock({
   options: string[];
   selectedIndex: number;
   marks?: string;
+  onPromptChange: (value: string) => void;
   onDelete: () => void;
   onSelectOption: (index: number) => void;
   onOptionChange: (index: number, value: string) => void;
@@ -176,9 +178,12 @@ function QuestionBlock({
           <TrashIcon />
         </button>
       </div>
-      <div className={`h-[75px] w-full rounded-[8px] border px-3 py-3 text-[16px] ${isDark ? "border-slate-600 text-slate-100" : "border-[#dbe3ef] text-[#0f172a]"}`}>
-        {prompt}
-      </div>
+      <textarea
+        value={prompt}
+        onChange={(event) => onPromptChange(event.target.value)}
+        className={`h-[75px] w-full resize-none rounded-[8px] border px-3 py-3 text-[16px] outline-none placeholder:text-[#98a2b3] ${isDark ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-400" : "border-[#dbe3ef] bg-white text-[#0f172a]"}`}
+        placeholder="Write your question..."
+      />
       <div className="mt-2 grid gap-2 md:grid-cols-2">
         {options.map((option, index) => (
           <button
@@ -792,6 +797,13 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                     options={question.options}
                     selectedIndex={question.selectedIndex}
                     marks={question.marks}
+                    onPromptChange={(value) =>
+                      setMcqQuestions((prev) =>
+                        prev.map((item) =>
+                          item.id === question.id ? { ...item, prompt: value } : item
+                        )
+                      )
+                    }
                     onDelete={() =>
                       setMcqQuestions((prev) =>
                         prev
