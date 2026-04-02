@@ -1,6 +1,14 @@
 import type { AdminTestListItem } from "@/components/admin/lib/testListStorage";
 
-const API_BASE = (process.env.NEXT_PUBLIC_BACKEND_URL || "/backend").replace(/\/$/, "");
+const ENV_API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "";
+
+const LOCAL_DEV_FALLBACK =
+  typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:3001"
+    : "";
+
+const API_BASE = (ENV_API_BASE || LOCAL_DEV_FALLBACK).replace(/\/$/, "");
 
 type RequestOptions = {
   token?: string;
@@ -40,6 +48,12 @@ type BackendTest = {
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (!API_BASE) {
+    throw new Error(
+      "API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL in frontend environment."
+    );
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
     method: options.method || "GET",
     headers: {
