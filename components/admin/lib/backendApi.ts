@@ -15,6 +15,7 @@ type RequestOptions = {
   headers?: Record<string, string>;
   body?: unknown;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
+  cache?: RequestCache;
 };
 
 type BackendMcqQuestion = {
@@ -29,6 +30,15 @@ type BackendCodingTask = {
   description: string;
   language: string;
   marks: number;
+  starterCode?: string;
+  timeLimitMs?: number;
+  memoryLimitKb?: number;
+  testCases?: Array<{
+    input: string;
+    expectedOutput: string;
+    isHidden?: boolean;
+    weight?: number;
+  }>;
   sampleInput: string;
   sampleOutput: string;
 };
@@ -39,12 +49,31 @@ type BackendTest = {
   position: string;
   durationMinutes: number;
   passPercentage: number;
+  roleCategory?: "developer" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
+  enabledSections?: string[];
   passcode: string;
   passcodeExpiresAt?: string;
   status: "draft" | "active";
   createdAt: string;
+  security?: {
+    forceFullscreen?: boolean;
+    disableTabSwitch?: boolean;
+    autoEndOnTabChange?: boolean;
+    disableCopyPaste?: boolean;
+    disableRightClick?: boolean;
+    detectDevTools?: boolean;
+    warningLimit?: number;
+    autoSaveIntervalSeconds?: number;
+  };
   mcqQuestions: BackendMcqQuestion[];
   codingTasks: BackendCodingTask[];
+  sectionConfigs?: Array<{
+    key: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+    title: string;
+    prompt: string;
+    instructions?: string;
+    required?: boolean;
+  }>;
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -56,6 +85,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const response = await fetch(`${API_BASE}${path}`, {
     method: options.method || "GET",
+    cache: options.cache ?? "no-store",
     headers: {
       "Content-Type": "application/json",
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
@@ -95,12 +125,61 @@ function mapBackendTestToAdminListItem(test: BackendTest): AdminTestListItem {
     testName: test.title,
     position: test.position,
     duration: test.durationMinutes,
+    passPercentage: test.passPercentage,
+    roleCategory: test.roleCategory || "developer",
+    enabledSections: Array.isArray(test.enabledSections) ? test.enabledSections : ["mcq", "coding"],
+    sectionConfigs: Array.isArray(test.sectionConfigs) ? test.sectionConfigs : [],
     mcqs: test.mcqQuestions.length,
     coding: test.codingTasks.length,
     mcqQuestionItems: test.mcqQuestions.map((q, index) => q.question || `Question ${index + 1}`),
     codingTaskItems: test.codingTasks.map((task, index) => task.title || `Task ${index + 1}`),
+    mcqQuestionsDetailed: test.mcqQuestions.map((q) => ({
+      prompt: q.question || "",
+      options: Array.isArray(q.options) ? q.options.map((opt) => String(opt?.text || "")) : [],
+      selectedIndex: Number.isFinite(q.correctOptionIndex) ? q.correctOptionIndex : 0,
+      marks: Number.isFinite(q.marks) ? q.marks : 1,
+    })),
+    codingTasksDetailed: test.codingTasks.map((task) => ({
+      taskName: task.title || "",
+      language: task.language || "JavaScript",
+      description: task.description || "",
+      marks: Number.isFinite(task.marks) ? task.marks : 1,
+      testCases:
+        Array.isArray(task.testCases) && task.testCases.length > 0
+          ? task.testCases.map((item) => ({
+              input: item.input || "",
+              expectedOutput: item.expectedOutput || "",
+              isHidden: item.isHidden === true,
+              weight: Number.isFinite(Number(item.weight)) && Number(item.weight) > 0 ? Number(item.weight) : 1,
+            }))
+          : [
+              {
+                input: task.sampleInput || "",
+                expectedOutput: task.sampleOutput || "",
+                isHidden: false,
+                weight: 1,
+              },
+            ],
+    })),
     passcode: test.passcode,
     passcodeExpiresAt: test.passcodeExpiresAt,
+    securityFlags: {
+      forceFullscreen: Boolean(test.security?.forceFullscreen),
+      disableTabSwitch: Boolean(test.security?.disableTabSwitch),
+      autoEndOnTabChange: Boolean(test.security?.autoEndOnTabChange),
+      disableCopyPaste: Boolean(test.security?.disableCopyPaste),
+      disableRightClick: Boolean(test.security?.disableRightClick),
+      devToolsDetection: Boolean(test.security?.detectDevTools),
+    },
+    warningLimit:
+      typeof test.security?.warningLimit === "number" && Number.isFinite(test.security.warningLimit)
+        ? test.security.warningLimit
+        : 2,
+    autoSaveIntervalSeconds:
+      typeof test.security?.autoSaveIntervalSeconds === "number" &&
+      Number.isFinite(test.security.autoSaveIntervalSeconds)
+        ? test.security.autoSaveIntervalSeconds
+        : 60,
     status: test.status === "active" ? "Active" : "Draft",
     created: new Date(test.createdAt).toISOString().slice(0, 10),
   };
@@ -111,12 +190,26 @@ export async function listAdminTests(token: string): Promise<AdminTestListItem[]
   return (result.tests || []).map(mapBackendTestToAdminListItem);
 }
 
+export async function getAdminTestForEdit(token: string, id: string | number): Promise<AdminTestListItem> {
+  const result = await request<{ test: BackendTest }>(`/api/admin/tests/${id}`, { token });
+  return mapBackendTestToAdminListItem(result.test);
+}
+
 export type SaveAdminTestPayload = {
   id?: string | number;
   testName: string;
   position: string;
   duration: number;
   passPercentage: number;
+  roleCategory?: "developer" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
+  enabledSections?: string[];
+  sectionConfigs?: Array<{
+    key: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+    title: string;
+    prompt: string;
+    instructions?: string;
+    required?: boolean;
+  }>;
   status: "draft" | "active";
   warningLimit: number;
   autoSaveIntervalSeconds: number;
@@ -141,6 +234,12 @@ export type SaveAdminTestPayload = {
     marks: number;
     sampleInput: string;
     sampleOutput: string;
+    testCases?: Array<{
+      input: string;
+      expectedOutput: string;
+      isHidden?: boolean;
+      weight?: number;
+    }>;
   }>;
 };
 
@@ -150,6 +249,9 @@ function buildBackendTestPayload(payload: SaveAdminTestPayload) {
     position: payload.position,
     durationMinutes: payload.duration,
     passPercentage: payload.passPercentage,
+    roleCategory: payload.roleCategory || "developer",
+    enabledSections: payload.enabledSections || ["mcq", "coding"],
+    sectionConfigs: payload.sectionConfigs || [],
     status: payload.status,
     security: {
       forceFullscreen: payload.securityFlags.forceFullscreen,
@@ -172,6 +274,25 @@ function buildBackendTestPayload(payload: SaveAdminTestPayload) {
       description: task.description,
       language: task.language,
       marks: task.marks,
+      starterCode: "",
+      timeLimitMs: 4000,
+      memoryLimitKb: 131072,
+      testCases:
+        Array.isArray(task.testCases) && task.testCases.length > 0
+          ? task.testCases.map((item) => ({
+              input: item.input || "",
+              expectedOutput: item.expectedOutput || "",
+              isHidden: item.isHidden === true,
+              weight: Number.isFinite(Number(item.weight)) && Number(item.weight) > 0 ? Number(item.weight) : 1,
+            }))
+          : [
+              {
+                input: task.sampleInput || "",
+                expectedOutput: task.sampleOutput || "",
+                isHidden: false,
+                weight: 1,
+              },
+            ],
       sampleInput: task.sampleInput,
       sampleOutput: task.sampleOutput,
     })),
@@ -211,6 +332,8 @@ type CandidateLoginResponse = {
     position: string;
     durationMinutes: number;
     passPercentage: number;
+    roleCategory?: "developer" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
+    enabledSections?: string[];
     security: {
       forceFullscreen?: boolean;
       disableTabSwitch?: boolean;
@@ -233,8 +356,23 @@ type CandidateLoginResponse = {
       description: string;
       language: string;
       marks: number;
+      starterCode?: string;
+      timeLimitMs?: number;
+      memoryLimitKb?: number;
+      sampleCases?: Array<{
+        input: string;
+        expectedOutput: string;
+      }>;
       sampleInput: string;
       sampleOutput: string;
+    }>;
+    sectionConfigs?: Array<{
+      index: number;
+      key: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+      title: string;
+      prompt: string;
+      instructions?: string;
+      required?: boolean;
     }>;
   };
   submission: {
@@ -245,6 +383,22 @@ type CandidateLoginResponse = {
     startedAt: string;
   };
 };
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const lowered = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(lowered)) return true;
+    if (["false", "0", "no", "off", ""].includes(lowered)) return false;
+  }
+  if (typeof value === "number") return value !== 0;
+  return fallback;
+}
+
+function asNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 export type CandidateProfilePayload = {
   phoneNumber: string;
@@ -275,16 +429,48 @@ export async function getCandidateTestByPasscode(passcode: string) {
   }>(`/api/candidate/test/${encodeURIComponent(passcode)}`);
 }
 
+export async function getCandidateProfilePrefill(params: {
+  candidateEmail: string;
+  testPasscode?: string;
+}) {
+  const query = new URLSearchParams({ candidateEmail: params.candidateEmail.trim() });
+  if (params.testPasscode?.trim()) {
+    query.set("testPasscode", params.testPasscode.trim());
+  }
+  return request<{
+    found: boolean;
+    candidateName?: string;
+    candidateProfile?: Partial<CandidateProfilePayload>;
+  }>(`/api/candidate/profile-prefill?${query.toString()}`);
+}
+
 export async function candidateLoginWithPasscode(payload: {
   candidateEmail: string;
   candidateName?: string;
   testPasscode: string;
   candidateProfile?: CandidateProfilePayload;
 }): Promise<CandidateLoginResponse> {
-  return request<CandidateLoginResponse>("/api/candidate/login-with-passcode", {
+  const response = await request<CandidateLoginResponse>("/api/candidate/login-with-passcode", {
     method: "POST",
     body: payload,
   });
+  const security = response?.test?.security || {};
+  return {
+    ...response,
+    test: {
+      ...response.test,
+      security: {
+        forceFullscreen: asBoolean(security.forceFullscreen, false),
+        disableTabSwitch: asBoolean(security.disableTabSwitch, false),
+        autoEndOnTabChange: asBoolean(security.autoEndOnTabChange, false),
+        disableCopyPaste: asBoolean(security.disableCopyPaste, false),
+        disableRightClick: asBoolean(security.disableRightClick, false),
+        detectDevTools: asBoolean(security.detectDevTools, false),
+        warningLimit: asNumber(security.warningLimit, 2),
+        autoSaveIntervalSeconds: asNumber(security.autoSaveIntervalSeconds, 60),
+      },
+    },
+  };
 }
 
 export type AdminDashboardResponse = {
@@ -373,6 +559,14 @@ export type AdminReviewDetailResponse = {
         status: "Under Review" | "Passed" | "Failed" | "On Hold";
         feedback: string;
       }>;
+      sectionReviews?: Array<{
+        sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+        itemIndex: number;
+        title: string;
+        marksAwarded: number;
+        status: "Under Review" | "Passed" | "Failed" | "On Hold";
+        feedback: string;
+      }>;
       reviewedAt: string;
     };
     mcqRows: Array<{
@@ -391,6 +585,17 @@ export type AdminReviewDetailResponse = {
       marksAwarded: number;
       status: "Under Review" | "Passed" | "Failed" | "On Hold";
       code: string;
+      feedback: string;
+    }>;
+    sectionRows?: Array<{
+      sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+      itemIndex: number;
+      title: string;
+      prompt: string;
+      answer: string;
+      maxMarks: number;
+      marksAwarded: number;
+      status: "Under Review" | "Passed" | "Failed" | "On Hold";
       feedback: string;
     }>;
     violationRows: Array<{
@@ -419,6 +624,13 @@ export async function saveAdminReviewDecision(
       status: "Under Review" | "Passed" | "Failed" | "On Hold";
       feedback: string;
     }>;
+    sectionReviews?: Array<{
+      sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+      itemIndex: number;
+      marksAwarded: number;
+      status: "Under Review" | "Passed" | "Failed" | "On Hold";
+      feedback: string;
+    }>;
   }
 ) {
   return request<{
@@ -428,6 +640,14 @@ export async function saveAdminReviewDecision(
       comment: string;
       codingReviews?: Array<{
         taskIndex: number;
+        title: string;
+        marksAwarded: number;
+        status: "Under Review" | "Passed" | "Failed" | "On Hold";
+        feedback: string;
+      }>;
+      sectionReviews?: Array<{
+        sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+        itemIndex: number;
         title: string;
         marksAwarded: number;
         status: "Under Review" | "Passed" | "Failed" | "On Hold";
@@ -491,6 +711,11 @@ export async function saveCandidateDraft(payload: {
   candidateSessionToken: string;
   mcqAnswers?: Array<{ questionIndex: number; selectedOptionIndex: number }>;
   codingAnswers?: Array<{ taskIndex: number; code: string; language: string }>;
+  sectionAnswers?: Array<{
+    sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+    itemIndex: number;
+    answer: string;
+  }>;
 }) {
   return request<{ message: string }>(`/api/candidate/submission/${payload.submissionId}/draft`, {
     method: "POST",
@@ -498,6 +723,7 @@ export async function saveCandidateDraft(payload: {
     body: {
       mcqAnswers: payload.mcqAnswers || [],
       codingAnswers: payload.codingAnswers || [],
+      sectionAnswers: payload.sectionAnswers || [],
     },
   });
 }
@@ -507,10 +733,29 @@ export async function submitCandidateTest(payload: {
   candidateSessionToken: string;
   mcqAnswers: Array<{ questionIndex: number; selectedOptionIndex: number }>;
   codingAnswers: Array<{ taskIndex: number; code: string; language: string }>;
+  sectionAnswers?: Array<{
+    sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+    itemIndex: number;
+    answer: string;
+  }>;
   auto?: boolean;
   endedReason?: string;
 }) {
-  return request<{ message: string; submission: { id: string; totalScore: number; status: string } }>(
+  return request<{
+    message: string;
+    submission: {
+      id: string;
+      totalScore: number;
+      status: string;
+      codingEvaluation?: {
+        status: "not_required" | "queued" | "running" | "completed" | "failed";
+        startedAt?: string | null;
+        completedAt?: string | null;
+        totalMarks?: number;
+        maxMarks?: number;
+      };
+    };
+  }>(
     `/api/candidate/submission/${payload.submissionId}/submit`,
     {
       method: "POST",
@@ -518,11 +763,40 @@ export async function submitCandidateTest(payload: {
       body: {
         mcqAnswers: payload.mcqAnswers,
         codingAnswers: payload.codingAnswers,
+        sectionAnswers: payload.sectionAnswers || [],
         auto: payload.auto ?? false,
         endedReason: payload.endedReason || "",
       },
     }
   );
+}
+
+export async function getCandidateEvaluationStatus(payload: {
+  submissionId: string;
+  candidateSessionToken: string;
+}) {
+  const qs = new URLSearchParams({ t: String(Date.now()) }).toString();
+  return request<{
+    evaluation: {
+      status: "not_required" | "queued" | "running" | "completed" | "failed";
+      startedAt?: string | null;
+      completedAt?: string | null;
+      totalMarks: number;
+      maxMarks: number;
+      version: number;
+      error?: string;
+      tasks: Array<{
+        taskIndex: number;
+        title: string;
+        marksAwarded: number;
+        maxMarks: number;
+        status: "pending" | "running" | "completed" | "failed";
+      }>;
+    };
+  }>(`/api/candidate/submission/${payload.submissionId}/evaluation-status?${qs}`, {
+    headers: { "x-candidate-session": payload.candidateSessionToken },
+    cache: "no-store",
+  });
 }
 
 export async function logCandidateViolation(payload: {

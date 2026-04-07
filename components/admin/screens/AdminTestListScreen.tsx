@@ -10,7 +10,7 @@ import { useAdminTheme } from "@/components/admin/hooks/useAdminTheme";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { AppPagination } from "@/components/shared/ui/AppPagination";
 import { AppSearchBar } from "@/components/shared/ui/AppSearchBar";
-import { deleteAdminTest, listAdminTests } from "@/components/admin/lib/backendApi";
+import { deleteAdminTest, getAdminTestForEdit, listAdminTests } from "@/components/admin/lib/backendApi";
 import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
 import { setEditingTestDraft, type AdminTestListItem } from "@/components/admin/lib/testListStorage";
 
@@ -364,8 +364,16 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
                             <button
                               type="button"
                               aria-label="Edit test"
-                              onClick={() => {
-                                setEditingTestDraft(row);
+                              onClick={async () => {
+                                let draft = row;
+                                if (token) {
+                                  try {
+                                    draft = await getAdminTestForEdit(token, row.id);
+                                  } catch {
+                                    // Fallback to list row if detail API is unavailable.
+                                  }
+                                }
+                                setEditingTestDraft(draft);
                                 router.push("/admin/create-test");
                               }}
                             >

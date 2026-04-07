@@ -1,6 +1,6 @@
 type CreateTestStep = 1 | 2 | 3 | 4 | 5;
 
-const steps: { id: CreateTestStep; label: string }[] = [
+const baseSteps: { id: CreateTestStep; label: string }[] = [
   { id: 1, label: "Basic Info" },
   { id: 2, label: "Add MCQs" },
   { id: 3, label: "Coding Tasks" },
@@ -16,14 +16,28 @@ function CheckIcon() {
   );
 }
 
-export function CreateTestStepper({ currentStep, isDark = false }: { currentStep: CreateTestStep; isDark?: boolean }) {
+export function CreateTestStepper({
+  currentStep,
+  isDark = false,
+  includeCodingStep = true,
+  stepThreeLabel = "Coding Tasks",
+}: {
+  currentStep: CreateTestStep;
+  isDark?: boolean;
+  includeCodingStep?: boolean;
+  stepThreeLabel?: string;
+}) {
+  const steps = baseSteps.map((step) =>
+    step.id === 3 ? { ...step, label: stepThreeLabel } : step
+  );
+  const visibleSteps = includeCodingStep ? steps : steps.filter((step) => step.id !== 3);
   return (
     <div className="w-full">
       <div className="flex w-full items-start">
-        {steps.map((step, index) => {
+        {visibleSteps.map((step, index) => {
           const isCompleted = step.id < currentStep;
           const isActive = step.id === currentStep;
-          const isLast = index === steps.length - 1;
+          const isLast = index === visibleSteps.length - 1;
 
           return (
             <div key={step.id} className={`flex items-start ${isLast ? "" : "flex-1"}`}>
@@ -43,7 +57,7 @@ export function CreateTestStepper({ currentStep, isDark = false }: { currentStep
                 </div>
                 <p className={`mt-2 text-center text-[18px] font-medium ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>{step.label}</p>
               </div>
-              {index < steps.length - 1 ? (
+              {index < visibleSteps.length - 1 ? (
                 <div
                   className={`mx-3 mt-[30px] h-1 flex-1 rounded-full ${
                     step.id < currentStep ? "bg-[#1f3a8a]" : isDark ? "bg-slate-700" : "bg-[#dbe3ef]"

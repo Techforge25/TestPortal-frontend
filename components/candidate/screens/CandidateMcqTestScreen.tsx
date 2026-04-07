@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { saveCandidateDraft, submitCandidateTest } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
 import {
-  clearCandidateSession,
   readCandidateSession,
   saveCandidateResultSummary,
   saveCandidateSession,
@@ -15,6 +14,7 @@ import { CandidateCountdown } from "@/components/candidate/components/CandidateC
 import { useCandidateSecurityGuard } from "@/components/candidate/security/useCandidateSecurityGuard";
 import { calculateMcqScore, calculateMcqTotal } from "@/components/candidate/security/scoring";
 import { clearRuntimeState } from "@/components/candidate/security/runtimeStore";
+import { getRouteAfterMcq, isMcqEnabled } from "@/components/candidate/lib/assessmentFlow";
 
 type LocalMcqQuestion = {
   id: string;
@@ -145,6 +145,7 @@ export function CandidateMcqTestScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
   const [error, setError] = useState("");
+  const mcqEnabled = isMcqEnabled(session);
 
   const questions = useMemo<LocalMcqQuestion[]>(
     () =>
@@ -178,6 +179,7 @@ export function CandidateMcqTestScreen() {
         candidateSessionToken: session.candidateSessionToken,
         mcqAnswers,
         codingAnswers: [],
+        sectionAnswers: session.sectionAnswers || [],
         auto: true,
         endedReason: reason,
       });
@@ -187,9 +189,9 @@ export function CandidateMcqTestScreen() {
         mcqScore,
         mcqTotal,
         submittedAt: new Date().toISOString(),
+        codingEvaluation: { status: "not_required", totalMarks: 0, maxMarks: 0 },
       });
       clearRuntimeState(session.submissionId);
-      clearCandidateSession();
       router.push("/candidate/submitted");
     },
   });
@@ -229,8 +231,15 @@ export function CandidateMcqTestScreen() {
         return;
       }
     }
-    router.push("/candidate/tasks");
+    router.push(getRouteAfterMcq(session));
   }
+
+  useEffect(() => {
+    if (!session) return;
+    if (mcqEnabled) return;
+    const next = getRouteAfterMcq(session);
+    router.push(next);
+  }, [mcqEnabled, router, session]);
 
   if (!session) {
     return (

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { candidateLoginWithPasscode } from "@/components/admin/lib/backendApi";
+import { candidateLoginWithPasscode, getCandidateProfilePrefill } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
 import { clearCandidateAuthDraft, readCandidateAuthDraft } from "@/components/candidate/lib/candidateAuthDraft";
 import { AuthTextField } from "@/components/shared/auth/AuthTextField";
@@ -143,7 +143,7 @@ function formatCnic(value: string) {
 
 function BrandMark() {
   return (
-    <svg viewBox="0 0 50 34" className="h-[34px] w-[50px]" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 50 34" className="h-[62px] w-[92px]" fill="none" aria-hidden="true">
       <rect x="1.5" y="1.5" width="30" height="30" rx="7" stroke="#ffffff" strokeWidth="3" />
       <path d="M10 16L16 22L27 11" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M30 23C33 21.5 35 19 36 15" stroke="#15A8FF" strokeWidth="3" strokeLinecap="round" />
@@ -154,6 +154,7 @@ function BrandMark() {
 export function CandidateRegistrationScreen() {
   const router = useRouter();
   const loginDraft = useMemo(() => readCandidateAuthDraft(), []);
+  const didPrefillRef = useRef(false);
   const [form, setForm] = useState<FormState>(() => ({
     ...initialState,
     email: loginDraft?.email || "",
@@ -161,6 +162,48 @@ export function CandidateRegistrationScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const branding = usePublicBranding();
+
+  useEffect(() => {
+    if (didPrefillRef.current) return;
+    didPrefillRef.current = true;
+    const candidateEmail = loginDraft?.email?.trim();
+    const testPasscode = loginDraft?.testPasscode?.trim();
+    if (!candidateEmail) return;
+
+    void (async () => {
+      try {
+        const prefill = await getCandidateProfilePrefill({
+          candidateEmail,
+          testPasscode,
+        });
+        if (!prefill.found) return;
+        setForm((prev) => ({
+          ...prev,
+          fullName: prefill.candidateName || prev.fullName,
+          phoneNumber: prefill.candidateProfile?.phoneNumber || prev.phoneNumber,
+          cnic: prefill.candidateProfile?.cnic || prev.cnic,
+          maritalStatus: prefill.candidateProfile?.maritalStatus || prev.maritalStatus,
+          qualification: prefill.candidateProfile?.qualification || prev.qualification,
+          dateOfBirth: prefill.candidateProfile?.dateOfBirth || prev.dateOfBirth,
+          positionAppliedFor:
+            prefill.candidateProfile?.positionAppliedFor || prev.positionAppliedFor,
+          residentialAddress:
+            prefill.candidateProfile?.residentialAddress || prev.residentialAddress,
+          workExperience: prefill.candidateProfile?.workExperience || prev.workExperience,
+          startDate: prefill.candidateProfile?.startDate || prev.startDate,
+          endDate: prefill.candidateProfile?.endDate || prev.endDate,
+          currentSalary: prefill.candidateProfile?.currentSalary || prev.currentSalary,
+          expectedSalary: prefill.candidateProfile?.expectedSalary || prev.expectedSalary,
+          expectedJoiningDate:
+            prefill.candidateProfile?.expectedJoiningDate || prev.expectedJoiningDate,
+          shiftComfortable:
+            prefill.candidateProfile?.shiftComfortable || prev.shiftComfortable,
+        }));
+      } catch {
+        // No-op: prefill is optional and should not block registration.
+      }
+    })();
+  }, [loginDraft]);
 
   function setValue(key: keyof FormState, value: string) {
     if (key === "fullName" || key === "positionAppliedFor" || key === "workExperience") {
@@ -265,18 +308,14 @@ export function CandidateRegistrationScreen() {
   return (
     <main className="min-h-screen bg-[#f8fafc]">
       <section className="mx-auto w-full max-w-[1084px] px-4 pb-8 pt-10 sm:px-6 lg:px-8">
-        <header className="flex h-[86px] items-center justify-center rounded-[12px] bg-[#1f3a8a] px-4">
-          <div className="flex items-center gap-2">
+        <header className="flex h-[96px] items-center justify-center rounded-[12px] bg-[#1f3a8a] px-4">
+          <div className="flex items-center justify-center">
             {branding.logoDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={branding.logoDataUrl} alt="Company logo" className="h-[34px] w-[50px] rounded object-contain" />
+              <img src={branding.logoDataUrl} alt="Company logo" className="h-[62px] w-auto max-w-[360px] object-contain" />
             ) : (
               <BrandMark />
             )}
-            <div className="leading-none text-white">
-              <p className="text-[28px] font-bold tracking-tight">{branding.companyName || "Hire Secure"}</p>
-              <p className="mt-1 text-xs">Secure Talent. Smart Decisions.</p>
-            </div>
           </div>
         </header>
 

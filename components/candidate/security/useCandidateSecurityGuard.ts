@@ -80,7 +80,10 @@ export function useCandidateSecurityGuard({
   onAutoSubmit,
 }: UseCandidateSecurityGuardArgs) {
   const pathname = usePathname();
-  const isExamRoute = pathname === "/candidate/test" || pathname === "/candidate/tasks";
+  const isExamRoute =
+    pathname === "/candidate/test" ||
+    pathname === "/candidate/assessment" ||
+    pathname === "/candidate/tasks";
   const warningLimit = useMemo(() => security.warningLimit || 2, [security.warningLimit]);
   const initialRuntime = submissionId ? readRuntimeState(submissionId) : null;
   const [deadlineAt] = useState(() => {
@@ -88,8 +91,27 @@ export function useCandidateSecurityGuard({
     return Date.now() + durationMinutes * 60 * 1000;
   });
   const [warningCount, setWarningCount] = useState(initialRuntime?.warningCount || 0);
+  const warningCountRef = useRef(initialRuntime?.warningCount || 0);
   const [warningPopup, setWarningPopup] = useState<WarningPopup | null>(null);
   const hasAutoSubmittedRef = useRef(false);
+  const guardArmedAtRef = useRef<number>(Date.now() + 100);
+  const tabHiddenTimerRef = useRef<number | null>(null);
+  const lastViolationAtRef = useRef<Record<string, number>>({});
+  const lastTabViolationAtRef = useRef<number>(0);
+  const devtoolsConsecutiveOpenRef = useRef(0);
+  const wasLikelyFullscreenRef = useRef<boolean>(false);
+
+  const isLikelyFullscreen = useCallback(() => {
+    if (typeof window === "undefined" || typeof screen === "undefined") return false;
+    if (Boolean(document.fullscreenElement)) return true;
+    const widthOk = window.innerWidth >= screen.width - 5;
+    const heightOk = window.innerHeight >= screen.height - 5;
+    return widthOk && heightOk;
+  }, []);
+
+  useEffect(() => {
+    warningCountRef.current = warningCount;
+  }, [warningCount]);
 
   const triggerAutoSubmit = useCallback(async (reason: string) => {
     if (hasAutoSubmittedRef.current) return;
@@ -98,6 +120,42 @@ export function useCandidateSecurityGuard({
   }, [onAutoSubmit]);
 
   const emitViolation = useCallback(async (type: string, meta: Record<string, unknown> = {}) => {
+    if (Date.now() < guardArmedAtRef.current) return;
+    const now = Date.now();
+    const lastAt = lastViolationAtRef.current[type] || 0;
+    if (now - lastAt < 350) return;
+    lastViolationAtRef.current[type] = now;
+
+    const nextWarningsLocal = warningCountRef.current + 1;
+    warningCountRef.current = nextWarningsLocal;
+    setWarningCount(nextWarningsLocal);
+    const violationText = getViolationText(type);
+    setWarningPopup({
+      id: Date.now(),
+      title: violationText.title,
+      message: violationText.message,
+      warningCount: nextWarningsLocal,
+      warningLimit: warningLimit,
+    });
+    const runtimeBefore = readRuntimeState(submissionId);
+    if (runtimeBefore) {
+      saveRuntimeState(submissionId, { ...runtimeBefore, warningCount: nextWarningsLocal });
+    }
+
+    const tabSwitchAutoEndEnabled = Boolean(security.disableTabSwitch && security.autoEndOnTabChange);
+    const isTabSwitchViolation = type === "tab_switch" || type === "tab_switch_auto_end";
+    if (tabSwitchAutoEndEnabled && isTabSwitchViolation) {
+      window.setTimeout(() => {
+        void triggerAutoSubmit("tab_switch_auto_end");
+      }, 400);
+      return;
+    }
+    if (nextWarningsLocal >= warningLimit) {
+      window.setTimeout(() => {
+        void triggerAutoSubmit("warning_limit_reached");
+      }, 1200);
+    }
+
     try {
       const response = await logCandidateViolation({
         submissionId,
@@ -107,28 +165,37 @@ export function useCandidateSecurityGuard({
         actionTaken: "warning_issued",
         meta,
       });
-      const nextWarnings = response.warningCount;
+      const nextWarnings = Number.isFinite(response.warningCount) ? response.warningCount : nextWarningsLocal;
+      warningCountRef.current = nextWarnings;
       setWarningCount(nextWarnings);
-      const violationText = getViolationText(type);
-      setWarningPopup({
-        id: Date.now(),
-        title: violationText.title,
-        message: violationText.message,
-        warningCount: nextWarnings,
-        warningLimit: warningLimit,
-      });
+      setWarningPopup((prev) =>
+        prev
+          ? {
+              ...prev,
+              warningCount: nextWarnings,
+              warningLimit,
+            }
+          : prev
+      );
       const runtime = readRuntimeState(submissionId);
       if (runtime) {
         saveRuntimeState(submissionId, { ...runtime, warningCount: nextWarnings });
       }
 
-      if (response.shouldAutoEnd || nextWarnings >= warningLimit) {
-        await triggerAutoSubmit("warning_limit_reached");
+      const shouldRespectBackendAutoEnd =
+        Boolean(response.shouldAutoEnd) && tabSwitchAutoEndEnabled && isTabSwitchViolation;
+
+      const shouldAutoEndByWarningLimit = Boolean(response.shouldAutoEnd);
+      if (shouldRespectBackendAutoEnd || shouldAutoEndByWarningLimit) {
+        // Let candidate see warning popup briefly before auto-ending.
+        window.setTimeout(() => {
+          void triggerAutoSubmit("warning_limit_reached");
+        }, 1200);
       }
     } catch {
       // No-op: security should never hard-crash the test UI
     }
-  }, [candidateSessionToken, submissionId, triggerAutoSubmit, warningLimit]);
+  }, [candidateSessionToken, security.autoEndOnTabChange, security.disableTabSwitch, submissionId, triggerAutoSubmit, warningLimit]);
 
   useEffect(() => {
     if (!isExamRoute) return;
@@ -157,18 +224,55 @@ export function useCandidateSecurityGuard({
     if (!isExamRoute) return;
     if (!submissionId) return;
     if (!security.disableTabSwitch) return;
+    const emitTabSwitchViolation = (source: string) => {
+      const now = Date.now();
+      if (now - lastTabViolationAtRef.current < 700) return;
+      lastTabViolationAtRef.current = now;
+      void emitViolation("tab_switch", { source });
+    };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        if (security.autoEndOnTabChange) {
-          void triggerAutoSubmit("tab_switch_auto_end");
-        } else {
-          void emitViolation("tab_switch", { source: "visibilitychange" });
+        if (tabHiddenTimerRef.current) {
+          window.clearTimeout(tabHiddenTimerRef.current);
         }
+        tabHiddenTimerRef.current = window.setTimeout(() => {
+          if (document.visibilityState !== "hidden") return;
+          emitTabSwitchViolation("visibilitychange");
+        }, 250);
+      } else if (tabHiddenTimerRef.current) {
+        window.clearTimeout(tabHiddenTimerRef.current);
+        tabHiddenTimerRef.current = null;
       }
     };
-    window.addEventListener("visibilitychange", onVisibilityChange);
-    return () => window.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [emitViolation, isExamRoute, security.autoEndOnTabChange, security.disableTabSwitch, submissionId, triggerAutoSubmit]);
+    const onWindowBlur = () => {
+      if (tabHiddenTimerRef.current) {
+        window.clearTimeout(tabHiddenTimerRef.current);
+      }
+      tabHiddenTimerRef.current = window.setTimeout(() => {
+        if (document.visibilityState === "hidden") {
+          emitTabSwitchViolation("window_blur");
+        }
+      }, 250);
+    };
+    const onWindowFocus = () => {
+      if (tabHiddenTimerRef.current) {
+        window.clearTimeout(tabHiddenTimerRef.current);
+        tabHiddenTimerRef.current = null;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onWindowFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onWindowFocus);
+      if (tabHiddenTimerRef.current) {
+        window.clearTimeout(tabHiddenTimerRef.current);
+        tabHiddenTimerRef.current = null;
+      }
+    };
+  }, [emitViolation, isExamRoute, security.disableTabSwitch, submissionId]);
 
   useEffect(() => {
     if (!isExamRoute) return;
@@ -192,7 +296,10 @@ export function useCandidateSecurityGuard({
     };
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if ((event.ctrlKey || event.metaKey) && ["c", "v", "x"].includes(key)) {
+      const isPrimaryCopyPaste =
+        (event.ctrlKey || event.metaKey) && ["c", "v", "x", "insert"].includes(key);
+      const isShiftInsert = event.shiftKey && key === "insert";
+      if (isPrimaryCopyPaste || isShiftInsert) {
         event.preventDefault();
         void emitViolation("clipboard_shortcut");
       }
@@ -217,8 +324,13 @@ export function useCandidateSecurityGuard({
     const interval = window.setInterval(() => {
       const widthDiff = Math.abs(window.outerWidth - window.innerWidth);
       const heightDiff = Math.abs(window.outerHeight - window.innerHeight);
-      const isOpen = widthDiff > 160 || heightDiff > 160;
-      if (isOpen && !devtoolsWasOpen) {
+      const isOpen = widthDiff > 220 || heightDiff > 220;
+      if (isOpen) {
+        devtoolsConsecutiveOpenRef.current += 1;
+      } else {
+        devtoolsConsecutiveOpenRef.current = 0;
+      }
+      if (isOpen && !devtoolsWasOpen && devtoolsConsecutiveOpenRef.current >= 2) {
         devtoolsWasOpen = true;
         void emitViolation("devtools_open");
       }
@@ -234,7 +346,10 @@ export function useCandidateSecurityGuard({
     if (!submissionId) return;
     if (!security.forceFullscreen) return;
 
+    let lastFullscreenRequestAt = 0;
+    let resizeTimer: number | null = null;
     const requestFullscreen = async () => {
+      lastFullscreenRequestAt = Date.now();
       if (!document.fullscreenElement) {
         try {
           await document.documentElement.requestFullscreen();
@@ -243,18 +358,42 @@ export function useCandidateSecurityGuard({
         }
       }
     };
+    wasLikelyFullscreenRef.current = isLikelyFullscreen();
     void requestFullscreen();
 
-    const onFullscreenChange = () => {
-      if (!document.fullscreenElement) {
-        void emitViolation("fullscreen_exit");
+    const checkFullscreenExit = () => {
+      const nowLikelyFullscreen = isLikelyFullscreen();
+      if (wasLikelyFullscreenRef.current && !nowLikelyFullscreen) {
+        if (Date.now() - lastFullscreenRequestAt < 1200) return;
+        void emitViolation("fullscreen_exit", { source: "fullscreen_exit_check" });
         void requestFullscreen();
       }
+      wasLikelyFullscreenRef.current = nowLikelyFullscreen;
+    };
+
+    const onFullscreenChange = () => {
+      checkFullscreenExit();
+    };
+
+    const onResize = () => {
+      if (resizeTimer) {
+        window.clearTimeout(resizeTimer);
+      }
+      resizeTimer = window.setTimeout(() => {
+        checkFullscreenExit();
+      }, 120);
     };
 
     window.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => window.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, [emitViolation, isExamRoute, security.forceFullscreen, submissionId]);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("fullscreenchange", onFullscreenChange);
+      window.removeEventListener("resize", onResize);
+      if (resizeTimer) {
+        window.clearTimeout(resizeTimer);
+      }
+    };
+  }, [emitViolation, isExamRoute, isLikelyFullscreen, security.forceFullscreen, submissionId]);
 
   return {
     deadlineAt,

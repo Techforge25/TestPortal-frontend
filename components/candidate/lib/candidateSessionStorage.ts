@@ -2,12 +2,19 @@ type CandidateSession = {
   submissionId: string;
   candidateSessionToken: string;
   mcqAnswers?: Array<{ questionIndex: number; selectedOptionIndex: number }>;
+  sectionAnswers?: Array<{
+    sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+    itemIndex: number;
+    answer: string;
+  }>;
   test: {
     id: string;
     title: string;
     position: string;
     durationMinutes: number;
     passPercentage: number;
+    roleCategory?: "developer" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
+    enabledSections?: string[];
     security: {
       forceFullscreen?: boolean;
       disableTabSwitch?: boolean;
@@ -33,6 +40,14 @@ type CandidateSession = {
       sampleInput: string;
       sampleOutput: string;
     }>;
+    sectionConfigs?: Array<{
+      index: number;
+      key: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+      title: string;
+      prompt: string;
+      instructions?: string;
+      required?: boolean;
+    }>;
   };
   candidate: {
     name: string;
@@ -47,6 +62,11 @@ type CandidateTestResultSummary = {
   mcqScore: number;
   mcqTotal: number;
   submittedAt: string;
+  codingEvaluation?: {
+    status: "not_required" | "queued" | "running" | "completed" | "failed";
+    totalMarks: number;
+    maxMarks: number;
+  };
 };
 
 export function saveCandidateSession(session: CandidateSession) {

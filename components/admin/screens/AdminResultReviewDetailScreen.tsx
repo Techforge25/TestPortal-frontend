@@ -17,11 +17,21 @@ import { AppButton } from "@/components/shared/ui/AppButton";
 import { AppSegmentedControl } from "@/components/shared/ui/AppSegmentedControl";
 
 type Decision = "Passed" | "Failed" | "Shortlisted" | "On Hold";
-type ReviewTab = "overview" | "mcq" | "coding" | "violations";
+type ReviewTab = "overview" | "mcq" | "assessment" | "coding" | "violations";
 type CodingReviewStatus = "Under Review" | "Passed" | "Failed" | "On Hold";
 
 type CodingReviewDraft = {
   taskIndex: number;
+  title: string;
+  maxMarks: number;
+  marksAwarded: number;
+  status: CodingReviewStatus;
+  feedback: string;
+};
+
+type SectionReviewDraft = {
+  sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+  itemIndex: number;
   title: string;
   maxMarks: number;
   marksAwarded: number;
@@ -108,17 +118,26 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
   const [isSaving, setIsSaving] = useState(false);
   const [isProfileViewOpen, setIsProfileViewOpen] = useState(false);
   const [codingReviews, setCodingReviews] = useState<CodingReviewDraft[]>([]);
+  const [sectionReviews, setSectionReviews] = useState<SectionReviewDraft[]>([]);
 
   const authError = token ? "" : "Admin session missing. Please login again.";
   const submissionError = resolvedSubmissionId ? "" : "No submission found.";
 
   const decisions: Decision[] = ["Passed", "Failed", "Shortlisted", "On Hold"];
+  const hasAssessmentRows = Boolean(detail?.sectionRows?.length);
+  const hasCodingRows = Boolean(detail?.codingRows?.length);
   const tabs: { id: ReviewTab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "mcq", label: "MCQ Answers" },
-    { id: "coding", label: "Coding Submissions" },
+    ...(hasAssessmentRows ? [{ id: "assessment" as const, label: "Assessment Answers" }] : []),
+    ...(hasCodingRows ? [{ id: "coding" as const, label: "Coding Submissions" }] : []),
     { id: "violations", label: "Violations Log" },
   ];
+
+  useEffect(() => {
+    if (tabs.some((tab) => tab.id === activeTab)) return;
+    setActiveTab("overview");
+  }, [activeTab, tabs]);
 
   const profileRows = useMemo(
     () =>
@@ -157,6 +176,17 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
           marksAwarded: task.marksAwarded || 0,
           status: task.status || "Under Review",
           feedback: task.feedback || "",
+        }))
+      );
+      setSectionReviews(
+        (response.submission.sectionRows || []).map((row) => ({
+          sectionKey: row.sectionKey,
+          itemIndex: row.itemIndex,
+          title: row.title,
+          maxMarks: row.maxMarks,
+          marksAwarded: row.marksAwarded || 0,
+          status: row.status || "Under Review",
+          feedback: row.feedback || "",
         }))
       );
       if (response.submission.review?.decision) {
@@ -350,6 +380,13 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
         comment,
         codingReviews: codingReviews.map((row) => ({
           taskIndex: row.taskIndex,
+          marksAwarded: row.marksAwarded,
+          status: row.status,
+          feedback: row.feedback,
+        })),
+        sectionReviews: sectionReviews.map((row) => ({
+          sectionKey: row.sectionKey,
+          itemIndex: row.itemIndex,
           marksAwarded: row.marksAwarded,
           status: row.status,
           feedback: row.feedback,
@@ -644,6 +681,119 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                 <div className="flex justify-end">
                   <AppButton variant="primary" onClick={handleSaveDecision} disabled={isSaving || !detail}>
                     {isSaving ? "Saving..." : "Save Coding Review"}
+                  </AppButton>
+                </div>
+              </section>
+            ) : null}
+
+            {activeTab === "assessment" ? (
+              <section className="space-y-4">
+                {(detail?.sectionRows || []).map((row) => {
+                  const review = sectionReviews.find(
+                    (item) => item.sectionKey === row.sectionKey && item.itemIndex === row.itemIndex
+                  );
+                  return (
+                    <article
+                      key={`${row.sectionKey}-${row.itemIndex}`}
+                      className={`rounded-[8px] border ${isDark ? "border-slate-700 bg-slate-900" : "border-[#e2e8f0] bg-white"}`}
+                    >
+                      <div className={`rounded-t-[8px] px-4 py-2 ${isDark ? "bg-slate-800" : "bg-[#f3f4f6]"}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className={`text-[18px] font-semibold [zoom:0.84] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
+                            {row.title}
+                          </h4>
+                          <p className={`text-[13px] [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#64748b]"}`}>
+                            Max: {row.maxMarks} marks
+                          </p>
+                        </div>
+                        {row.prompt ? (
+                          <p className={`mt-1 text-sm ${isDark ? "text-slate-300" : "text-[#475569]"}`}>{row.prompt}</p>
+                        ) : null}
+                      </div>
+
+                      <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_0.8fr]">
+                        <div className={`rounded-[10px] border p-3 ${isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-[#f8fafc]"}`}>
+                          <p className={`mb-2 text-[14px] ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>Candidate Answer</p>
+                          <pre className={`whitespace-pre-wrap text-[14px] leading-6 ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
+                            {row.answer || "-"}
+                          </pre>
+                        </div>
+                        <div className="space-y-4">
+                          <div className={`grid gap-3 rounded-[8px] border p-3 sm:grid-cols-2 ${isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-white"}`}>
+                            <div>
+                              <p className={`text-[14px] ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>Marks Awarded</p>
+                              <input
+                                type="number"
+                                min={0}
+                                max={row.maxMarks}
+                                value={review?.marksAwarded ?? 0}
+                                onChange={(event) => {
+                                  const next = Number(event.target.value || 0);
+                                  const clamped = Number.isFinite(next) ? Math.max(0, Math.min(row.maxMarks, next)) : 0;
+                                  setSectionReviews((prev) =>
+                                    prev.map((item) =>
+                                      item.sectionKey === row.sectionKey && item.itemIndex === row.itemIndex
+                                        ? { ...item, marksAwarded: clamped }
+                                        : item
+                                    )
+                                  );
+                                }}
+                                className={`mt-1 h-11 w-full rounded-[8px] border px-3 text-[16px] outline-none ${
+                                  isDark ? "border-slate-600 bg-slate-900 text-slate-100" : "border-[#d6dbe6] bg-white text-[#0f172a]"
+                                }`}
+                              />
+                            </div>
+                            <div>
+                              <p className={`text-[14px] ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>Status</p>
+                              <select
+                                value={review?.status || "Under Review"}
+                                onChange={(event) =>
+                                  setSectionReviews((prev) =>
+                                    prev.map((item) =>
+                                      item.sectionKey === row.sectionKey && item.itemIndex === row.itemIndex
+                                        ? { ...item, status: event.target.value as CodingReviewStatus }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={`mt-1 h-11 w-full rounded-[8px] border px-3 text-[16px] outline-none ${
+                                  isDark ? "border-slate-600 bg-slate-900 text-slate-100" : "border-[#d6dbe6] bg-white text-[#0f172a]"
+                                }`}
+                              >
+                                <option value="Under Review">Under Review</option>
+                                <option value="Passed">Passed</option>
+                                <option value="Failed">Failed</option>
+                                <option value="On Hold">On Hold</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className={`rounded-[8px] border p-3 ${isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-white"}`}>
+                            <p className={`text-[14px] ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>Feedback</p>
+                            <textarea
+                              value={review?.feedback || ""}
+                              onChange={(event) =>
+                                setSectionReviews((prev) =>
+                                  prev.map((item) =>
+                                    item.sectionKey === row.sectionKey && item.itemIndex === row.itemIndex
+                                      ? { ...item, feedback: event.target.value }
+                                      : item
+                                  )
+                                )
+                              }
+                              placeholder="Write feedback..."
+                              className={`mt-1 h-24 w-full rounded-[8px] border p-3 text-[15px] leading-6 outline-none ${
+                                isDark ? "border-slate-600 bg-slate-900 text-slate-100 placeholder:text-slate-400" : "border-[#d6dbe6] bg-white text-[#111827] placeholder:text-[#94a3b8]"
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+                <div className="flex justify-end">
+                  <AppButton variant="primary" onClick={handleSaveDecision} disabled={isSaving || !detail}>
+                    {isSaving ? "Saving..." : "Save Assessment Review"}
                   </AppButton>
                 </div>
               </section>

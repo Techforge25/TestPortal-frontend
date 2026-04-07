@@ -3,18 +3,94 @@ export type AdminTestListItem = {
   testName: string;
   position: string;
   duration: number;
+  passPercentage: number;
+  roleCategory?: "developer" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
+  enabledSections?: string[];
+  sectionConfigs?: Array<{
+    key: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+    title: string;
+    prompt: string;
+    instructions?: string;
+    required?: boolean;
+  }>;
   mcqs: number;
   coding: number;
   mcqQuestionItems: string[];
   codingTaskItems: string[];
+  mcqQuestionsDetailed?: Array<{
+    prompt: string;
+    options: string[];
+    selectedIndex: number;
+    marks: number;
+  }>;
+  codingTasksDetailed?: Array<{
+    taskName: string;
+    language: string;
+    description: string;
+    marks: number;
+    testCases: Array<{
+      input: string;
+      expectedOutput: string;
+      isHidden: boolean;
+      weight: number;
+    }>;
+  }>;
   passcode: string;
   passcodeExpiresAt?: string;
+  securityFlags?: {
+    forceFullscreen: boolean;
+    disableTabSwitch: boolean;
+    autoEndOnTabChange: boolean;
+    disableCopyPaste: boolean;
+    disableRightClick: boolean;
+    devToolsDetection: boolean;
+  };
+  warningLimit?: number;
+  autoSaveIntervalSeconds?: number;
   status: "Active" | "Draft";
   created: string;
 };
 
 const STORAGE_KEY = "admin_published_tests";
 const EDIT_DRAFT_KEY = "admin_editing_test_draft";
+
+function normalizeDetailedMcqs(input: unknown) {
+  if (!Array.isArray(input)) return undefined;
+  return input.map((item) => ({
+    prompt: String((item as { prompt?: unknown })?.prompt || ""),
+    options: Array.isArray((item as { options?: unknown })?.options)
+      ? ((item as { options?: unknown[] }).options || []).map((opt) => String(opt || ""))
+      : [],
+    selectedIndex: Number.isFinite(Number((item as { selectedIndex?: unknown })?.selectedIndex))
+      ? Number((item as { selectedIndex?: unknown })?.selectedIndex)
+      : 0,
+    marks: Number.isFinite(Number((item as { marks?: unknown })?.marks))
+      ? Number((item as { marks?: unknown })?.marks)
+      : 1,
+  }));
+}
+
+function normalizeDetailedCodingTasks(input: unknown) {
+  if (!Array.isArray(input)) return undefined;
+  return input.map((item) => ({
+    taskName: String((item as { taskName?: unknown })?.taskName || ""),
+    language: String((item as { language?: unknown })?.language || "JavaScript"),
+    description: String((item as { description?: unknown })?.description || ""),
+    marks: Number.isFinite(Number((item as { marks?: unknown })?.marks))
+      ? Number((item as { marks?: unknown })?.marks)
+      : 1,
+    testCases: Array.isArray((item as { testCases?: unknown })?.testCases)
+      ? ((item as { testCases?: unknown[] }).testCases || []).map((tc) => ({
+          input: String((tc as { input?: unknown })?.input || ""),
+          expectedOutput: String((tc as { expectedOutput?: unknown })?.expectedOutput || ""),
+          isHidden: Boolean((tc as { isHidden?: unknown })?.isHidden),
+          weight: Number.isFinite(Number((tc as { weight?: unknown })?.weight))
+            ? Number((tc as { weight?: unknown })?.weight)
+            : 1,
+        }))
+      : [],
+  }));
+}
 
 function buildPasscode(seed?: number | string): string {
   const numericSeed =
@@ -52,10 +128,43 @@ function parseStoredItems(raw: string | null): AdminTestListItem[] {
         return {
           ...item,
           id,
+          passPercentage:
+            typeof item.passPercentage === "number" && Number.isFinite(item.passPercentage)
+              ? item.passPercentage
+              : 70,
+          roleCategory:
+            typeof item.roleCategory === "string" && item.roleCategory.trim().length > 0
+              ? item.roleCategory
+              : "developer",
+          enabledSections: Array.isArray(item.enabledSections)
+            ? item.enabledSections.map((v: unknown) => String(v))
+            : ["mcq", "coding"],
+          securityFlags:
+            item.securityFlags && typeof item.securityFlags === "object"
+              ? {
+                  forceFullscreen: Boolean(item.securityFlags.forceFullscreen),
+                  disableTabSwitch: Boolean(item.securityFlags.disableTabSwitch),
+                  autoEndOnTabChange: Boolean(item.securityFlags.autoEndOnTabChange),
+                  disableCopyPaste: Boolean(item.securityFlags.disableCopyPaste),
+                  disableRightClick: Boolean(item.securityFlags.disableRightClick),
+                  devToolsDetection: Boolean(item.securityFlags.devToolsDetection),
+                }
+              : undefined,
+          warningLimit:
+            typeof item.warningLimit === "number" && Number.isFinite(item.warningLimit)
+              ? item.warningLimit
+              : undefined,
+          autoSaveIntervalSeconds:
+            typeof item.autoSaveIntervalSeconds === "number" &&
+            Number.isFinite(item.autoSaveIntervalSeconds)
+              ? item.autoSaveIntervalSeconds
+              : undefined,
           mcqs,
           coding,
           mcqQuestionItems,
           codingTaskItems,
+          mcqQuestionsDetailed: normalizeDetailedMcqs(item.mcqQuestionsDetailed),
+          codingTasksDetailed: normalizeDetailedCodingTasks(item.codingTasksDetailed),
           passcode:
             typeof item.passcode === "string" && item.passcode.trim().length > 0
               ? item.passcode
@@ -126,6 +235,37 @@ export function readEditingTestDraft(): AdminTestListItem | null {
     return {
       ...item,
       id,
+      passPercentage:
+        typeof item.passPercentage === "number" && Number.isFinite(item.passPercentage)
+          ? item.passPercentage
+          : 70,
+      roleCategory:
+        typeof item.roleCategory === "string" && item.roleCategory.trim().length > 0
+          ? item.roleCategory
+          : "developer",
+      enabledSections: Array.isArray(item.enabledSections)
+        ? item.enabledSections.map((v: unknown) => String(v))
+        : ["mcq", "coding"],
+      securityFlags:
+        item.securityFlags && typeof item.securityFlags === "object"
+          ? {
+              forceFullscreen: Boolean(item.securityFlags.forceFullscreen),
+              disableTabSwitch: Boolean(item.securityFlags.disableTabSwitch),
+              autoEndOnTabChange: Boolean(item.securityFlags.autoEndOnTabChange),
+              disableCopyPaste: Boolean(item.securityFlags.disableCopyPaste),
+              disableRightClick: Boolean(item.securityFlags.disableRightClick),
+              devToolsDetection: Boolean(item.securityFlags.devToolsDetection),
+            }
+          : undefined,
+      warningLimit:
+        typeof item.warningLimit === "number" && Number.isFinite(item.warningLimit)
+          ? item.warningLimit
+          : undefined,
+      autoSaveIntervalSeconds:
+        typeof item.autoSaveIntervalSeconds === "number" &&
+        Number.isFinite(item.autoSaveIntervalSeconds)
+          ? item.autoSaveIntervalSeconds
+          : undefined,
       mcqs,
       coding,
       mcqQuestionItems:
@@ -136,6 +276,8 @@ export function readEditingTestDraft(): AdminTestListItem | null {
         Array.isArray(item.codingTaskItems) && item.codingTaskItems.length > 0
           ? item.codingTaskItems
           : Array.from({ length: coding }, (_, idx) => `Task ${idx + 1}`),
+      mcqQuestionsDetailed: normalizeDetailedMcqs(item.mcqQuestionsDetailed),
+      codingTasksDetailed: normalizeDetailedCodingTasks(item.codingTasksDetailed),
       passcode:
         typeof item.passcode === "string" && item.passcode.trim().length > 0
           ? item.passcode

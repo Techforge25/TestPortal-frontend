@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { AppDropdown, DropdownOption } from "@/components/shared/ui/AppDropdown";
 import { runCandidateCode, saveCandidateDraft, submitCandidateTest } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
 import {
-  clearCandidateSession,
   readCandidateSession,
   saveCandidateResultSummary,
 } from "@/components/candidate/lib/candidateSessionStorage";
@@ -15,6 +14,7 @@ import { CandidateCountdown } from "@/components/candidate/components/CandidateC
 import { useCandidateSecurityGuard } from "@/components/candidate/security/useCandidateSecurityGuard";
 import { calculateMcqScore, calculateMcqTotal } from "@/components/candidate/security/scoring";
 import { clearRuntimeState } from "@/components/candidate/security/runtimeStore";
+import { hasNonCodingSections, isCodingEnabled, isMcqEnabled } from "@/components/candidate/lib/assessmentFlow";
 
 type CodingTask = {
   id: string;
@@ -117,6 +117,8 @@ export function CandidateCodingTaskScreen() {
   const [runResult, setRunResult] = useState<CodeRunResult | null>(null);
   const [runInput, setRunInput] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+  const codingEnabled = isCodingEnabled(session);
+  const mcqEnabled = isMcqEnabled(session);
   const codingTasks = useMemo<CodingTask[]>(
     () =>
       session?.test?.codingTasks?.length
@@ -140,6 +142,16 @@ export function CandidateCodingTaskScreen() {
   const activeTask = codingTasks[taskIndex];
   const codeValue = codeByTask[activeTask.id] ?? activeTask.starterCode;
   const codeLines = codeValue.split("\n");
+  const buildCodingAnswers = useCallback(
+    (currentLanguage: string) =>
+      codingTasks.map((task, index) => ({
+        taskIndex: index,
+        code: codeByTask[task.id] || task.starterCode,
+        language: currentLanguage,
+      })),
+    [codingTasks, codeByTask]
+  );
+
   const { deadlineAt, warningCount, warningPopup, dismissWarningPopup } = useCandidateSecurityGuard({
     submissionId: session?.submissionId || "",
     candidateSessionToken: session?.candidateSessionToken || "",
@@ -148,16 +160,14 @@ export function CandidateCodingTaskScreen() {
     onAutoSubmit: async (reason) => {
       if (!session?.submissionId || !session.candidateSessionToken) return;
       const mcqAnswers = session.mcqAnswers || [];
-      const codingAnswers = codingTasks.map((task, index) => ({
-        taskIndex: index,
-        code: codeByTask[task.id] || task.starterCode,
-        language,
-      }));
+      const sectionAnswers = session.sectionAnswers || [];
+      const codingAnswers = buildCodingAnswers(language);
       const response = await submitCandidateTest({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
         mcqAnswers,
         codingAnswers,
+        sectionAnswers,
         auto: true,
         endedReason: reason,
       });
@@ -167,9 +177,13 @@ export function CandidateCodingTaskScreen() {
         mcqScore: Math.min(mcqScore, response.submission.totalScore || mcqScore),
         mcqTotal,
         submittedAt: new Date().toISOString(),
+        codingEvaluation: {
+          status: response.submission.codingEvaluation?.status || "queued",
+          totalMarks: Number(response.submission.codingEvaluation?.totalMarks || 0),
+          maxMarks: Number(response.submission.codingEvaluation?.maxMarks || 0),
+        },
       });
       clearRuntimeState(session.submissionId);
-      clearCandidateSession();
       router.push("/candidate/submitted");
     },
   });
@@ -178,6 +192,20 @@ export function CandidateCodingTaskScreen() {
     setRunResult(null);
     setRunError("");
   }, [taskIndex, language]);
+
+  useEffect(() => {
+    if (!session) return;
+    if (codingEnabled) return;
+    if (hasNonCodingSections(session)) {
+      router.push("/candidate/assessment");
+      return;
+    }
+    if (mcqEnabled) {
+      router.push("/candidate/test");
+      return;
+    }
+    router.push("/candidate/submitted");
+  }, [codingEnabled, mcqEnabled, router, session]);
 
   function handleCodeChange(value: string) {
     setCodeByTask((prev) => ({ ...prev, [activeTask.id]: value }));
@@ -195,16 +223,14 @@ export function CandidateCodingTaskScreen() {
     }
     try {
       const mcqAnswers = session.mcqAnswers || [];
-      const codingAnswers = codingTasks.map((task, index) => ({
-        taskIndex: index,
-        code: codeByTask[task.id] || task.starterCode,
-        language,
-      }));
+      const sectionAnswers = session.sectionAnswers || [];
+      const codingAnswers = buildCodingAnswers(language);
       const response = await submitCandidateTest({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
         mcqAnswers,
         codingAnswers,
+        sectionAnswers,
       });
       const mcqTotal = (session.test.mcqQuestions || []).reduce((sum, question) => sum + (question.marks || 1), 0);
       const mcqScore = calculateMcqScore(session.test.mcqQuestions || [], mcqAnswers);
@@ -212,9 +238,13 @@ export function CandidateCodingTaskScreen() {
         mcqScore: Math.min(mcqScore, response.submission.totalScore || mcqScore),
         mcqTotal,
         submittedAt: new Date().toISOString(),
+        codingEvaluation: {
+          status: response.submission.codingEvaluation?.status || "queued",
+          totalMarks: Number(response.submission.codingEvaluation?.totalMarks || 0),
+          maxMarks: Number(response.submission.codingEvaluation?.maxMarks || 0),
+        },
       });
       clearRuntimeState(session.submissionId);
-      clearCandidateSession();
       router.push("/candidate/submitted");
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Failed to submit test";
@@ -244,11 +274,8 @@ export function CandidateCodingTaskScreen() {
       await saveCandidateDraft({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
-        codingAnswers: codingTasks.map((task, index) => ({
-          taskIndex: index,
-          code: codeByTask[task.id] || task.starterCode,
-          language,
-        })),
+        codingAnswers: buildCodingAnswers(language),
+        sectionAnswers: session.sectionAnswers || [],
       });
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : "Failed to run code";
@@ -271,19 +298,15 @@ export function CandidateCodingTaskScreen() {
 
   return (
     <main className="flex min-h-screen flex-col bg-[#1e1e1e]">
-      <header className="flex h-[76px] w-full items-center">
-        <div className="flex h-full w-full max-w-[281px] items-center justify-center bg-[#1f3a8a] px-3">
-          <div className="flex items-center gap-2">
+      <header className="flex h-[86px] w-full items-center">
+        <div className="flex h-full w-full max-w-[320px] items-center justify-center bg-[#1f3a8a] px-3">
+          <div className="flex items-center justify-center">
             {branding.logoDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={branding.logoDataUrl} alt="Company logo" className="h-[34px] w-[50px] rounded object-contain" />
+              <img src={branding.logoDataUrl} alt="Company logo" className="h-[64px] w-[220px] rounded object-contain" />
             ) : (
               <BrandMark />
             )}
-            <div className="leading-none text-white">
-              <p className="text-[24px] font-bold tracking-tight">{branding.companyName || "Hire Secure"}</p>
-              <p className="mt-1 text-[12px]">Secure Talent. Smart Decisions.</p>
-            </div>
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
 import { readCandidateSession } from "@/components/candidate/lib/candidateSessionStorage";
+import { getCandidateStartRoute, isCodingEnabled, isMcqEnabled } from "@/components/candidate/lib/assessmentFlow";
 
 function TimeIcon() {
   return (
@@ -88,8 +89,11 @@ export function CandidatePreTestScreen() {
   const branding = usePublicBranding();
   const session = useMemo(() => readCandidateSession(), []);
   const test = session?.test;
-  const totalMcqs = test?.mcqQuestions?.length || 0;
-  const totalTasks = test?.codingTasks?.length || 0;
+  const mcqEnabled = isMcqEnabled(session);
+  const codingEnabled = isCodingEnabled(session);
+  const totalMcqs = mcqEnabled ? test?.mcqQuestions?.length || 0 : 0;
+  const totalTasks = codingEnabled ? test?.codingTasks?.length || 0 : 0;
+  const startRoute = getCandidateStartRoute(session);
   const duration = test?.durationMinutes || 0;
   const autoSaveInterval = test?.security?.autoSaveIntervalSeconds || 60;
   const warningLimit = test?.security?.warningLimit || 2;
@@ -148,14 +152,18 @@ export function CandidatePreTestScreen() {
                 <ClockCircle />
                 <p>{duration} minutes</p>
               </div>
-              <div className="flex items-center gap-3 text-[30px] [zoom:0.58]">
-                <CheckCircle />
-                <p>{totalMcqs} MCQ Questions</p>
-              </div>
-              <div className="flex items-center gap-3 text-[30px] [zoom:0.58]">
-                <CheckCircle />
-                <p>{totalTasks} Coding Tasks</p>
-              </div>
+              {mcqEnabled ? (
+                <div className="flex items-center gap-3 text-[30px] [zoom:0.58]">
+                  <CheckCircle />
+                  <p>{totalMcqs} MCQ Questions</p>
+                </div>
+              ) : null}
+              {codingEnabled ? (
+                <div className="flex items-center gap-3 text-[30px] [zoom:0.58]">
+                  <CheckCircle />
+                  <p>{totalTasks} Coding Tasks</p>
+                </div>
+              ) : null}
             </div>
           </header>
 
@@ -204,13 +212,21 @@ export function CandidatePreTestScreen() {
                 type="button"
                 size="lg"
                 variant="primary"
-                disabled={!accepted}
+                disabled={!accepted || !startRoute}
                 className="w-full rounded-[10px]"
                 rightIcon={<RocketIcon />}
-                onClick={() => router.push("/candidate/test")}
+                onClick={() => {
+                  if (!startRoute) return;
+                  router.push(startRoute);
+                }}
               >
                 Start Test
               </AppButton>
+              {!startRoute ? (
+                <p className="text-sm text-red-600">
+                  This test has no supported candidate sections yet. Please contact admin.
+                </p>
+              ) : null}
             </section>
           </div>
         </article>
