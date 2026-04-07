@@ -6,6 +6,7 @@ const SUPPORTED_SECTION_KEYS = [
   "short_answer",
   "long_answer",
   "scenario",
+  "ui_preview",
   "portfolio_link",
   "bug_report",
   "test_case",
@@ -36,7 +37,8 @@ export function isCodingEnabled(session: CandidateSession | null): boolean {
 
 export function getCandidateStartRoute(session: CandidateSession | null): string | null {
   if (isMcqEnabled(session)) return "/candidate/test";
-  if (hasNonCodingSections(session)) return "/candidate/assessment";
+  if (hasUiPreviewSections(session)) return "/candidate/ui-preview";
+  if (hasAssessmentSections(session)) return "/candidate/assessment";
   if (isCodingEnabled(session)) return "/candidate/tasks";
   return null;
 }
@@ -46,12 +48,32 @@ export function hasNonCodingSections(session: CandidateSession | null): boolean 
   return sections.some((section) => section !== "mcq" && section !== "coding");
 }
 
-export function getRouteAfterMcq(session: CandidateSession | null): "/candidate/assessment" | "/candidate/tasks" | "/candidate/submitted" {
-  if (hasNonCodingSections(session)) return "/candidate/assessment";
+export function hasUiPreviewSections(session: CandidateSession | null): boolean {
+  return getSupportedSections(session).includes("ui_preview");
+}
+
+export function hasAssessmentSections(session: CandidateSession | null): boolean {
+  const sections = getSupportedSections(session);
+  return sections.some((section) => section !== "mcq" && section !== "coding" && section !== "ui_preview");
+}
+
+export function getRouteAfterMcq(
+  session: CandidateSession | null
+): "/candidate/ui-preview" | "/candidate/assessment" | "/candidate/tasks" | "/candidate/submitted" {
+  if (hasUiPreviewSections(session)) return "/candidate/ui-preview";
+  if (hasAssessmentSections(session)) return "/candidate/assessment";
   if (isCodingEnabled(session)) return "/candidate/tasks";
   return "/candidate/submitted";
 }
 
 export function getRouteAfterAssessment(session: CandidateSession | null): "/candidate/tasks" | "/candidate/submitted" {
   return isCodingEnabled(session) ? "/candidate/tasks" : "/candidate/submitted";
+}
+
+export function getRouteAfterUiPreview(
+  session: CandidateSession | null
+): "/candidate/assessment" | "/candidate/tasks" | "/candidate/submitted" {
+  if (hasAssessmentSections(session)) return "/candidate/assessment";
+  if (isCodingEnabled(session)) return "/candidate/tasks";
+  return "/candidate/submitted";
 }

@@ -6,6 +6,11 @@ import { AppButton } from "@/components/shared/ui/AppButton";
 import { saveCandidateDraft, submitCandidateTest } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
 import {
+  UiPreviewTaskEditor,
+  DEFAULT_REACT_UI_PREVIEW_CODE,
+  type UiPreviewAnswer,
+} from "@/components/candidate/components/UiPreviewTaskEditor";
+import {
   readCandidateSession,
   saveCandidateResultSummary,
   saveCandidateSession,
@@ -14,11 +19,23 @@ import { CandidateCountdown } from "@/components/candidate/components/CandidateC
 import { useCandidateSecurityGuard } from "@/components/candidate/security/useCandidateSecurityGuard";
 import { calculateMcqScore, calculateMcqTotal } from "@/components/candidate/security/scoring";
 import { clearRuntimeState } from "@/components/candidate/security/runtimeStore";
-import { getRouteAfterAssessment, hasNonCodingSections } from "@/components/candidate/lib/assessmentFlow";
+import {
+  getRouteAfterAssessment,
+  getRouteAfterUiPreview,
+  hasAssessmentSections,
+  hasUiPreviewSections,
+} from "@/components/candidate/lib/assessmentFlow";
 
 type SectionConfig = {
   index: number;
-  key: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+  key:
+    | "short_answer"
+    | "long_answer"
+    | "scenario"
+    | "ui_preview"
+    | "portfolio_link"
+    | "bug_report"
+    | "test_case";
   title: string;
   prompt: string;
   instructions?: string;
@@ -41,6 +58,8 @@ function sectionPlaceholder(key: SectionConfig["key"]) {
       return "https://...";
     case "scenario":
       return "Write your scenario-based response";
+    case "ui_preview":
+      return "Build this UI using code editor and preview";
     case "long_answer":
       return "Write detailed answer";
     case "short_answer":
@@ -54,18 +73,74 @@ function sectionPlaceholder(key: SectionConfig["key"]) {
   }
 }
 
-export function CandidateAssessmentSectionScreen() {
+const defaultUiPreviewAnswer: UiPreviewAnswer = {
+  framework: "react_tailwind",
+  html: "<main>\n  <h1>UI Task</h1>\n</main>",
+  css: "body { font-family: sans-serif; padding: 20px; }",
+  js: "",
+  reactCode: DEFAULT_REACT_UI_PREVIEW_CODE,
+};
+
+function parseUiPreviewAnswer(raw: string): UiPreviewAnswer {
+  if (!raw?.trim()) return defaultUiPreviewAnswer;
+  try {
+    const parsed = JSON.parse(raw) as Partial<UiPreviewAnswer>;
+    return {
+      framework: parsed.framework === "html_css_js" ? "html_css_js" : "react_tailwind",
+      html: String(parsed.html || defaultUiPreviewAnswer.html),
+      css: String(parsed.css || defaultUiPreviewAnswer.css),
+      js: String(parsed.js || defaultUiPreviewAnswer.js),
+      reactCode: String(parsed.reactCode || defaultUiPreviewAnswer.reactCode),
+    };
+  } catch {
+    return {
+      ...defaultUiPreviewAnswer,
+      html: raw.includes("<") ? raw : defaultUiPreviewAnswer.html,
+    };
+  }
+}
+
+function parseUiPreviewPrompt(section: SectionConfig): { taskPrompt: string; referenceImageUrl: string } {
+  const rawPrompt = String(section.prompt || "");
+  try {
+    const parsed = JSON.parse(rawPrompt) as { taskPrompt?: string; referenceImageUrl?: string };
+    return {
+      taskPrompt: String(parsed.taskPrompt || "Recreate the provided UI screen in code."),
+      referenceImageUrl: String(parsed.referenceImageUrl || ""),
+    };
+  } catch {
+    const text = `${section.prompt || ""}\n${section.instructions || ""}`;
+    const httpMatch = text.match(/https?:\/\/[^\s)]+/i);
+    const dataMatch = text.match(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/i);
+    return {
+      taskPrompt: rawPrompt || "Recreate the provided UI screen in code.",
+      referenceImageUrl: httpMatch?.[0] || dataMatch?.[0] || "",
+    };
+  }
+}
+
+type CandidateAssessmentSectionScreenProps = {
+  mode?: "assessment" | "ui_preview";
+};
+
+export function CandidateAssessmentSectionScreen({ mode = "assessment" }: CandidateAssessmentSectionScreenProps) {
   const router = useRouter();
   const branding = usePublicBranding();
+  const [isHydrated, setIsHydrated] = useState(false);
   const session = useMemo(() => readCandidateSession(), []);
 
-  const configs = useMemo<SectionConfig[]>(() => {
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  const allConfigs = useMemo<SectionConfig[]>(() => {
     const all = session?.test?.sectionConfigs || [];
     const enabled = new Set((session?.test?.enabledSections || []).map((v) => String(v)));
     const filtered = all.filter((item) => enabled.has(item.key));
     if (filtered.length > 0) return filtered;
 
     const fallbackKeys: SectionConfig["key"][] = [
+      "ui_preview",
       "short_answer",
       "long_answer",
       "scenario",
@@ -91,6 +166,13 @@ export function CandidateAssessmentSectionScreen() {
       }));
   }, [session]);
 
+  const configs = useMemo<SectionConfig[]>(() => {
+    if (mode === "ui_preview") {
+      return allConfigs.filter((item) => item.key === "ui_preview");
+    }
+    return allConfigs.filter((item) => item.key !== "ui_preview");
+  }, [allConfigs, mode]);
+
   const [answers, setAnswers] = useState<Record<number, string>>(() => {
     const existing = session?.sectionAnswers || [];
     return existing.reduce<Record<number, string>>((acc, item) => {
@@ -98,16 +180,55 @@ export function CandidateAssessmentSectionScreen() {
       return acc;
     }, {});
   });
+  const [uiPreviewAnswers, setUiPreviewAnswers] = useState<Record<number, UiPreviewAnswer>>(() => {
+    const existing = session?.sectionAnswers || [];
+    return existing.reduce<Record<number, UiPreviewAnswer>>((acc, item) => {
+      if (item.sectionKey !== "ui_preview") return acc;
+      acc[item.itemIndex] = parseUiPreviewAnswer(item.answer || "");
+      return acc;
+    }, {});
+  });
+  useEffect(() => {
+    if (!configs.length) return;
+    const uiConfigs = configs.filter((cfg) => cfg.key === "ui_preview");
+    if (!uiConfigs.length) return;
+
+    setUiPreviewAnswers((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      uiConfigs.forEach((cfg) => {
+        if (next[cfg.index]) return;
+        next[cfg.index] = defaultUiPreviewAnswer;
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+
+    setAnswers((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      uiConfigs.forEach((cfg) => {
+        if (String(next[cfg.index] || "").trim()) return;
+        next[cfg.index] = JSON.stringify(defaultUiPreviewAnswer);
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [configs]);
   const [currentPage, setCurrentPage] = useState(0);
   const [error, setError] = useState("");
   const assessmentPages = useMemo(() => {
+    if (mode === "ui_preview") {
+      return [configs];
+    }
     const portfolio = configs.filter((section) => section.key === "portfolio_link");
     const others = configs.filter((section) => section.key !== "portfolio_link");
     return portfolio.length > 0 ? [others, portfolio] : [others];
-  }, [configs]);
+  }, [configs, mode]);
   const currentSections = assessmentPages[currentPage] || [];
   const totalPages = Math.max(assessmentPages.length, 1);
   const isPortfolioOnlyPage =
+    mode === "assessment" &&
     currentSections.length > 0 &&
     currentSections.every((section) => section.key === "portfolio_link");
 
@@ -133,7 +254,7 @@ export function CandidateAssessmentSectionScreen() {
     onAutoSubmit: async (reason) => {
       if (!session?.submissionId || !session.candidateSessionToken) return;
       const mcqAnswers = session.mcqAnswers || [];
-      const sectionAnswers = configs.map((config) => ({
+      const sectionAnswers = allConfigs.map((config) => ({
         sectionKey: config.key,
         itemIndex: config.index,
         answer: answers[config.index] || "",
@@ -162,9 +283,30 @@ export function CandidateAssessmentSectionScreen() {
 
   useEffect(() => {
     if (!session) return;
-    if (hasNonCodingSections(session)) return;
+
+    if (mode === "ui_preview") {
+      if (hasUiPreviewSections(session)) return;
+      if (hasAssessmentSections(session)) {
+        router.push("/candidate/assessment");
+        return;
+      }
+      router.push(getRouteAfterUiPreview(session));
+      return;
+    }
+
+    if (hasAssessmentSections(session)) return;
     router.push(getRouteAfterAssessment(session));
-  }, [router, session]);
+  }, [mode, router, session]);
+
+  if (!isHydrated) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f8fafc] px-4">
+        <div className="rounded-xl border border-[#e2e8f0] bg-white p-6 text-center">
+          <p className="text-base text-[#475569]">Loading assessment...</p>
+        </div>
+      </main>
+    );
+  }
 
   if (!session) {
     return (
@@ -189,7 +331,7 @@ export function CandidateAssessmentSectionScreen() {
       return;
     }
 
-    const sectionAnswers = configs.map((config) => ({
+    const sectionAnswers = allConfigs.map((config) => ({
       sectionKey: config.key,
       itemIndex: config.index,
       answer: String(answers[config.index] || ""),
@@ -204,7 +346,7 @@ export function CandidateAssessmentSectionScreen() {
       });
       saveCandidateSession({ ...session, sectionAnswers });
 
-      const nextRoute = getRouteAfterAssessment(session);
+      const nextRoute = mode === "ui_preview" ? getRouteAfterUiPreview(session) : getRouteAfterAssessment(session);
       if (nextRoute === "/candidate/tasks") {
         router.push(nextRoute);
         return;
@@ -255,20 +397,59 @@ export function CandidateAssessmentSectionScreen() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f8fafc]">
-      <section className="mx-auto w-full max-w-[1084px] px-4 pb-8 pt-10 sm:px-6 lg:px-8">
-        <article className="overflow-hidden rounded-[24px] border border-[#e2e8f0] bg-white">
-          <header className="flex items-center justify-between border-b border-[#e2e8f0] bg-[#f8fafc] px-6 py-4">
+    <main
+      className={`min-h-screen ${
+        mode === "ui_preview"
+          ? "bg-[radial-gradient(circle_at_top_left,_#eef4ff_0%,_#f8fbff_45%,_#f3f7ff_100%)]"
+          : "bg-[#f8fafc]"
+      }`}
+    >
+      <section
+        className={`mx-auto w-full pb-8 pt-10 ${
+          mode === "ui_preview"
+            ? "max-w-[1820px] px-4 sm:px-6 lg:px-10"
+            : "max-w-[1084px] px-4 sm:px-6 lg:px-8"
+        }`}
+      >
+        <article
+          className={`overflow-hidden border bg-white ${
+            mode === "ui_preview"
+              ? "rounded-[20px] border-[#d9e3ff]"
+              : "rounded-[24px] border-[#e2e8f0]"
+          }`}
+        >
+          <header
+            className={`flex items-center justify-between border-b px-6 py-4 ${
+              mode === "ui_preview"
+                ? "border-[#d9e3ff] bg-[linear-gradient(90deg,#eef3ff_0%,#f8faff_100%)]"
+                : "border-[#e2e8f0] bg-[#f8fafc]"
+            }`}
+          >
             <div>
-              <h1 className="text-[24px] font-semibold text-[#0f172a]">Assessment Questions</h1>
-              <p className="text-sm text-[#64748b]">{branding.companyName || "Techforge Innovation"}</p>
+              <h1 className="text-[24px] font-semibold text-[#0f172a]">
+                {mode === "ui_preview" ? "UI Preview Task" : "Assessment Questions"}
+              </h1>
+              <div className="mt-1 flex items-center gap-2">
+                <p className="text-sm text-[#64748b]">{branding.companyName || "Techforge Innovation"}</p>
+                {mode === "ui_preview" ? (
+                  <span className="rounded-full bg-[#e8efff] px-2.5 py-1 text-xs font-semibold text-[#1f3a8a]">
+                    Frontend Challenge
+                  </span>
+                ) : null}
+              </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex h-[44px] items-center rounded-[8px] border border-[#dbe4ff] bg-white px-3">
+              <div
+                className={`flex h-[44px] items-center rounded-[10px] border px-3 ${
+                  mode === "ui_preview"
+                    ? "border-[#bfceff] bg-white shadow-[0_4px_14px_rgba(31,58,138,0.1)]"
+                    : "border-[#dbe4ff] bg-white"
+                }`}
+              >
                 <CandidateCountdown deadlineAt={deadlineAt} className="text-[16px] font-semibold text-[#0f172a]" />
               </div>
               {!isPortfolioOnlyPage ? (
-                <div className="flex h-[44px] items-center gap-2 rounded-[8px] bg-[#fff2e4] px-3">
+                <div className="flex h-[44px] items-center gap-2 rounded-[10px] border border-[#ffd8aa] bg-[#fff2e4] px-3">
                   <WarningIcon />
                   <p className="text-sm font-semibold text-[#d97706]">{warningCount} Warning{warningCount === 1 ? "" : "s"}</p>
                 </div>
@@ -276,15 +457,28 @@ export function CandidateAssessmentSectionScreen() {
             </div>
           </header>
 
-          <div className="space-y-5 px-6 py-6">
+          <div className={`space-y-5 px-6 py-6 ${mode === "ui_preview" ? "lg:px-8 lg:py-8" : ""}`}>
             {currentSections.length ? (
-              <section className="space-y-4 rounded-[12px] border border-[#e2e8f0] bg-white p-4">
+              <section
+                className={`space-y-4 border bg-white ${
+                  mode === "ui_preview"
+                    ? "rounded-[14px] border-[#e5ebff] p-4"
+                    : "rounded-[12px] border-[#e2e8f0] p-4"
+                }`}
+              >
                 {currentSections.map((section, itemIndex) => (
-                  <div key={`${section.key}-${section.index}`} className={itemIndex > 0 ? "border-t border-[#e2e8f0] pt-4" : ""}>
-                    <h2 className="text-[24px] font-semibold text-[#0f172a]">
+                  <div
+                    key={`${section.key}-${section.index}`}
+                    className={itemIndex > 0 ? `border-t pt-4 ${mode === "ui_preview" ? "border-[#dfe7ff]" : "border-[#e2e8f0]"}` : ""}
+                  >
+                    <h2 className={`font-semibold text-[#0f172a] ${mode === "ui_preview" ? "text-[28px]" : "text-[24px]"}`}>
                       {section.index + 1}. {section.title}
                     </h2>
-                    {section.prompt ? <p className="mt-1 text-sm text-[#475569]">{section.prompt}</p> : null}
+                    {section.prompt ? (
+                      <p className={`mt-1 text-[#475569] ${mode === "ui_preview" ? "text-[15px]" : "text-sm"}`}>
+                        {section.key === "ui_preview" ? parseUiPreviewPrompt(section).taskPrompt : section.prompt}
+                      </p>
+                    ) : null}
                     {section.instructions ? <p className="mt-1 text-xs text-[#64748b]">{section.instructions}</p> : null}
                     {section.key === "scenario" || section.key === "long_answer" || section.key === "bug_report" || section.key === "test_case" ? (
                       <textarea
@@ -293,6 +487,20 @@ export function CandidateAssessmentSectionScreen() {
                         placeholder={sectionPlaceholder(section.key)}
                         className="mt-3 h-[180px] w-full resize-none rounded-[8px] border border-[#dbe3ef] bg-white px-3 py-3 text-[15px] text-[#0f172a] outline-none placeholder:text-[#98a2b3] focus:border-[#1f3a8a]"
                       />
+                    ) : section.key === "ui_preview" ? (
+                      <div className="mt-3">
+                        <UiPreviewTaskEditor
+                          value={uiPreviewAnswers[section.index] || defaultUiPreviewAnswer}
+                          onChange={(next) => {
+                            setUiPreviewAnswers((prev) => ({ ...prev, [section.index]: next }));
+                            setAnswers((prev) => ({
+                              ...prev,
+                              [section.index]: JSON.stringify(next),
+                            }));
+                          }}
+                          referenceImageUrl={parseUiPreviewPrompt(section).referenceImageUrl}
+                        />
+                      </div>
                     ) : (
                       <input
                         value={answers[section.index] || ""}
@@ -310,22 +518,26 @@ export function CandidateAssessmentSectionScreen() {
               </section>
             )}
 
-            <div className="flex items-center justify-between">
+            <div
+              className={`flex items-center justify-between rounded-[14px] ${
+                mode === "ui_preview" ? "bg-[#f8faff] px-2 py-2" : ""
+              }`}
+            >
               <p className="text-sm text-[#64748b]">
                 Page {Math.min(currentPage + 1, totalPages)} of {totalPages}
               </p>
               <div className="flex items-center gap-3">
                 {currentPage > 0 ? (
-                  <AppButton variant="secondary" size="lg" className="min-w-[140px]" onClick={handlePreviousSection}>
+                  <AppButton variant="secondary" size="lg" className="min-w-[140px] rounded-[10px]" onClick={handlePreviousSection}>
                     Previous
                   </AppButton>
                 ) : null}
                 {currentPage < totalPages - 1 ? (
-                  <AppButton size="lg" className="min-w-[140px]" onClick={handleNextSection}>
+                  <AppButton size="lg" className="min-w-[140px] rounded-[10px]" onClick={handleNextSection}>
                     Next
                   </AppButton>
                 ) : (
-                  <AppButton size="lg" className="min-w-[190px]" onClick={handleContinue}>
+                  <AppButton size="lg" className="min-w-[190px] rounded-[10px]" onClick={handleContinue}>
                     Continue
                   </AppButton>
                 )}

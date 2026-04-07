@@ -4,10 +4,10 @@ export type AdminTestListItem = {
   position: string;
   duration: number;
   passPercentage: number;
-  roleCategory?: "developer" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
+  roleCategory?: "developer" | "frontend" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
   enabledSections?: string[];
   sectionConfigs?: Array<{
-    key: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+    key: "short_answer" | "long_answer" | "scenario" | "ui_preview" | "portfolio_link" | "bug_report" | "test_case";
     title: string;
     prompt: string;
     instructions?: string;

@@ -30,7 +30,7 @@ type CodingReviewDraft = {
 };
 
 type SectionReviewDraft = {
-  sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+  sectionKey: "short_answer" | "long_answer" | "scenario" | "ui_preview" | "portfolio_link" | "bug_report" | "test_case";
   itemIndex: number;
   title: string;
   maxMarks: number;
@@ -80,6 +80,80 @@ function WarningIcon() {
       <circle cx="12" cy="16.5" r="1" fill="currentColor" />
     </svg>
   );
+}
+
+type ParsedUiPreviewAnswer = {
+  framework: "html_css_js" | "react_tailwind";
+  html: string;
+  css: string;
+  js: string;
+  reactCode: string;
+};
+
+function parseUiPreviewAnswer(raw: string): ParsedUiPreviewAnswer | null {
+  if (!raw?.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ParsedUiPreviewAnswer>;
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      framework: parsed.framework === "html_css_js" ? "html_css_js" : "react_tailwind",
+      html: String(parsed.html || ""),
+      css: String(parsed.css || ""),
+      js: String(parsed.js || ""),
+      reactCode: String(parsed.reactCode || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildUiPreviewDoc(answer: ParsedUiPreviewAnswer) {
+  if (answer.framework === "react_tailwind") {
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>html,body{margin:0;padding:0} ${answer.css || ""}</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    function TaskApp() {
+      ${answer.reactCode || 'return <div className="p-6">No UI code submitted.</div>;'}
+    }
+    ReactDOM.createRoot(document.getElementById("root")).render(<TaskApp />);
+  </script>
+</body>
+</html>`;
+  }
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>html,body{margin:0;padding:0} ${answer.css || ""}</style>
+</head>
+<body>
+  ${answer.html || "<div>No UI code submitted.</div>"}
+  <script>${String(answer.js || "").replace(/<\/(script)/gi, "<\\/$1")}</script>
+</body>
+</html>`;
+}
+
+function parseUiPreviewPrompt(raw: string): string {
+  if (!raw?.trim()) return "";
+  try {
+    const parsed = JSON.parse(raw) as { taskPrompt?: string };
+    return String(parsed.taskPrompt || "");
+  } catch {
+    return raw;
+  }
 }
 
 function ScoreCard({
@@ -692,6 +766,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                   const review = sectionReviews.find(
                     (item) => item.sectionKey === row.sectionKey && item.itemIndex === row.itemIndex
                   );
+                  const parsedUiAnswer = row.sectionKey === "ui_preview" ? parseUiPreviewAnswer(row.answer || "") : null;
                   return (
                     <article
                       key={`${row.sectionKey}-${row.itemIndex}`}
@@ -707,16 +782,49 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                           </p>
                         </div>
                         {row.prompt ? (
-                          <p className={`mt-1 text-sm ${isDark ? "text-slate-300" : "text-[#475569]"}`}>{row.prompt}</p>
+                          <p className={`mt-1 text-sm ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
+                            {row.sectionKey === "ui_preview" ? parseUiPreviewPrompt(row.prompt) : row.prompt}
+                          </p>
                         ) : null}
                       </div>
 
                       <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_0.8fr]">
                         <div className={`rounded-[10px] border p-3 ${isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-[#f8fafc]"}`}>
                           <p className={`mb-2 text-[14px] ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>Candidate Answer</p>
-                          <pre className={`whitespace-pre-wrap text-[14px] leading-6 ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
-                            {row.answer || "-"}
-                          </pre>
+                          {parsedUiAnswer ? (
+                            <div className="space-y-3">
+                              <p className={`text-[13px] font-medium ${isDark ? "text-slate-300" : "text-[#334155]"}`}>
+                                Framework: {parsedUiAnswer.framework === "react_tailwind" ? "React + Tailwind" : "HTML/CSS/JS"}
+                              </p>
+                              <iframe
+                                title={`ui-preview-${row.itemIndex}`}
+                                sandbox="allow-scripts"
+                                srcDoc={buildUiPreviewDoc(parsedUiAnswer)}
+                                className={`h-[280px] w-full rounded-[8px] border ${isDark ? "border-slate-600" : "border-[#dbe3ef]"} bg-white`}
+                              />
+                              {parsedUiAnswer.framework === "react_tailwind" ? (
+                                <pre className={`overflow-x-auto rounded-[8px] p-3 text-[12px] leading-5 ${isDark ? "bg-slate-900 text-slate-100" : "bg-[#0f172a] text-white"}`}>
+                                  {parsedUiAnswer.reactCode || "// No React code"}
+                                </pre>
+                              ) : (
+                                <div className="space-y-2">
+                                  <pre className={`overflow-x-auto rounded-[8px] p-3 text-[12px] leading-5 ${isDark ? "bg-slate-900 text-slate-100" : "bg-[#0f172a] text-white"}`}>
+                                    {parsedUiAnswer.html || "<!-- No HTML -->"}
+                                  </pre>
+                                  <pre className={`overflow-x-auto rounded-[8px] p-3 text-[12px] leading-5 ${isDark ? "bg-slate-900 text-slate-100" : "bg-[#0f172a] text-white"}`}>
+                                    {parsedUiAnswer.css || "/* No CSS */"}
+                                  </pre>
+                                  <pre className={`overflow-x-auto rounded-[8px] p-3 text-[12px] leading-5 ${isDark ? "bg-slate-900 text-slate-100" : "bg-[#0f172a] text-white"}`}>
+                                    {parsedUiAnswer.js || "// No JS"}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <pre className={`whitespace-pre-wrap text-[14px] leading-6 ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
+                              {row.answer || "-"}
+                            </pre>
+                          )}
                         </div>
                         <div className="space-y-4">
                           <div className={`grid gap-3 rounded-[8px] border p-3 sm:grid-cols-2 ${isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-white"}`}>

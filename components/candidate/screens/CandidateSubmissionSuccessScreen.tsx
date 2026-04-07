@@ -61,6 +61,7 @@ const sectionLabels: Record<string, string> = {
   short_answer: "Short Answer",
   long_answer: "Long Answer",
   scenario: "Scenario",
+  ui_preview: "UI Preview Task",
   portfolio_link: "Portfolio / Link",
   bug_report: "Bug Report",
   test_case: "Test Case",

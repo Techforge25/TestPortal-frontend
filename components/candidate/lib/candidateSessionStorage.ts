@@ -3,7 +3,14 @@ type CandidateSession = {
   candidateSessionToken: string;
   mcqAnswers?: Array<{ questionIndex: number; selectedOptionIndex: number }>;
   sectionAnswers?: Array<{
-    sectionKey: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+    sectionKey:
+      | "short_answer"
+      | "long_answer"
+      | "scenario"
+      | "ui_preview"
+      | "portfolio_link"
+      | "bug_report"
+      | "test_case";
     itemIndex: number;
     answer: string;
   }>;
@@ -13,7 +20,7 @@ type CandidateSession = {
     position: string;
     durationMinutes: number;
     passPercentage: number;
-    roleCategory?: "developer" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
+    roleCategory?: "developer" | "frontend" | "designer" | "video_editor" | "qa_manual" | "hr" | "sales" | "other";
     enabledSections?: string[];
     security: {
       forceFullscreen?: boolean;
@@ -42,7 +49,14 @@ type CandidateSession = {
     }>;
     sectionConfigs?: Array<{
       index: number;
-      key: "short_answer" | "long_answer" | "scenario" | "portfolio_link" | "bug_report" | "test_case";
+      key:
+        | "short_answer"
+        | "long_answer"
+        | "scenario"
+        | "ui_preview"
+        | "portfolio_link"
+        | "bug_report"
+        | "test_case";
       title: string;
       prompt: string;
       instructions?: string;

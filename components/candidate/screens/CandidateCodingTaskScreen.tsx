@@ -14,7 +14,12 @@ import { CandidateCountdown } from "@/components/candidate/components/CandidateC
 import { useCandidateSecurityGuard } from "@/components/candidate/security/useCandidateSecurityGuard";
 import { calculateMcqScore, calculateMcqTotal } from "@/components/candidate/security/scoring";
 import { clearRuntimeState } from "@/components/candidate/security/runtimeStore";
-import { hasNonCodingSections, isCodingEnabled, isMcqEnabled } from "@/components/candidate/lib/assessmentFlow";
+import {
+  hasAssessmentSections,
+  hasUiPreviewSections,
+  isCodingEnabled,
+  isMcqEnabled,
+} from "@/components/candidate/lib/assessmentFlow";
 
 type CodingTask = {
   id: string;
@@ -196,7 +201,11 @@ export function CandidateCodingTaskScreen() {
   useEffect(() => {
     if (!session) return;
     if (codingEnabled) return;
-    if (hasNonCodingSections(session)) {
+    if (hasUiPreviewSections(session)) {
+      router.push("/candidate/ui-preview");
+      return;
+    }
+    if (hasAssessmentSections(session)) {
       router.push("/candidate/assessment");
       return;
     }

@@ -16,7 +16,7 @@ import { CreateTestSummaryField } from "@/components/admin/components/create-tes
 import { CreateTestStepper, type CreateTestStep } from "@/components/admin/components/create-test/CreateTestStepper";
 import { CreateTestToggle } from "@/components/admin/components/create-test/CreateTestToggle";
 import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
-import { getAdminSecurityDefaults, saveAdminTest } from "@/components/admin/lib/backendApi";
+import { getAdminSecurityDefaults, saveAdminTest, uploadAdminUiPreviewImage } from "@/components/admin/lib/backendApi";
 import {
   clearEditingTestDraft,
   readEditingTestDraft,
@@ -128,6 +128,7 @@ const languageOptions = [
 
 const roleOptions = [
   { value: "developer", label: "Developer" },
+  { value: "frontend", label: "Frontend" },
   { value: "designer", label: "Designer" },
   { value: "video_editor", label: "Video Editor" },
   { value: "qa_manual", label: "QA Manual" },
@@ -139,6 +140,7 @@ const roleOptions = [
 const sectionOptions = [
   { key: "mcq", label: "MCQs" },
   { key: "coding", label: "Coding" },
+  { key: "ui_preview", label: "UI Preview Task" },
   { key: "short_answer", label: "Short Answer" },
   { key: "long_answer", label: "Long Answer" },
   { key: "scenario", label: "Scenario" },
@@ -156,8 +158,14 @@ type SectionPromptItem = {
   value: string;
 };
 
+type UiPreviewPromptPayload = {
+  taskPrompt: string;
+  referenceImageUrl: string;
+};
+
 const rolePresetSections: Record<RoleCategory, string[]> = {
   developer: ["mcq", "coding"],
+  frontend: ["mcq", "ui_preview", "scenario", "portfolio_link", "short_answer"],
   designer: ["mcq", "scenario", "portfolio_link", "short_answer"],
   video_editor: ["mcq", "scenario", "short_answer", "long_answer"],
   qa_manual: ["mcq", "bug_report", "test_case", "short_answer"],
@@ -167,6 +175,7 @@ const rolePresetSections: Record<RoleCategory, string[]> = {
 };
 
 const nonCodingSectionKeys: NonCodingSectionKey[] = [
+  "ui_preview",
   "scenario",
   "portfolio_link",
   "short_answer",
@@ -176,6 +185,8 @@ const nonCodingSectionKeys: NonCodingSectionKey[] = [
 ];
 
 const sectionDefaultPrompt: Record<NonCodingSectionKey, string> = {
+  ui_preview:
+    "Recreate the reference screen in code. Add screenshot/link in prompt and evaluate visual match, responsiveness, and clean UI structure.",
   scenario: "Write a real-world scenario question for the candidate.",
   portfolio_link: "Paste portfolio/link prompt (e.g., Behance, Dribbble, GitHub, drive link).",
   short_answer: "Write a short answer question.",
@@ -183,6 +194,28 @@ const sectionDefaultPrompt: Record<NonCodingSectionKey, string> = {
   bug_report: "Write a bug report analysis question.",
   test_case: "Write a test case design question.",
 };
+
+function parseUiPreviewPrompt(raw: string): UiPreviewPromptPayload {
+  if (!raw?.trim()) {
+    return { taskPrompt: sectionDefaultPrompt.ui_preview, referenceImageUrl: "" };
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<UiPreviewPromptPayload>;
+    return {
+      taskPrompt: String(parsed.taskPrompt || sectionDefaultPrompt.ui_preview),
+      referenceImageUrl: String(parsed.referenceImageUrl || ""),
+    };
+  } catch {
+    return { taskPrompt: raw, referenceImageUrl: "" };
+  }
+}
+
+function buildUiPreviewPrompt(value: UiPreviewPromptPayload): string {
+  return JSON.stringify({
+    taskPrompt: String(value.taskPrompt || sectionDefaultPrompt.ui_preview),
+    referenceImageUrl: String(value.referenceImageUrl || ""),
+  });
+}
 
 const ADMIN_SECURITY_LOCAL_KEY = "admin_security_defaults_local_v1";
 
@@ -424,7 +457,7 @@ function CodingTaskBlock({
 }
 
 function getNextStep(step: CreateTestStep): CreateTestStep {
-  return step === 5 ? 5 : ((step + 1) as CreateTestStep);
+  return step === 6 ? 6 : ((step + 1) as CreateTestStep);
 }
 
 function getPreviousStep(step: CreateTestStep): CreateTestStep {
@@ -476,6 +509,8 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
   const [copied, setCopied] = useState(false);
   const [publishError, setPublishError] = useState("");
   const [basicInfoErrors, setBasicInfoErrors] = useState<BasicInfoErrors>({});
+  const [uiPreviewUploadErrors, setUiPreviewUploadErrors] = useState<Record<string, string>>({});
+  const [uiPreviewUploading, setUiPreviewUploading] = useState<Record<string, boolean>>({});
   const [securitySettings, setSecuritySettings] = useState({
     forceFullscreen: initialDraft?.securityFlags?.forceFullscreen ?? true,
     disableTabSwitch: initialDraft?.securityFlags?.disableTabSwitch ?? true,
@@ -485,6 +520,20 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     devToolsDetection: initialDraft?.securityFlags?.devToolsDetection ?? true,
   });
   const codingSectionEnabled = enabledSections.includes("coding");
+  const isFrontendRole = roleCategory === "frontend";
+  const maxStep = isFrontendRole ? 6 : 5;
+  const frontendStepperSteps: Array<{ id: CreateTestStep; label: string }> = [
+    { id: 1, label: "Basic Info" },
+    { id: 2, label: "Add MCQs" },
+    { id: 3, label: "UI Preview Task" },
+    { id: 4, label: "Assessment" },
+    { id: 5, label: "Security" },
+    { id: 6, label: "Publish" },
+  ];
+
+  useEffect(() => {
+    if (step > maxStep) setStep(maxStep as CreateTestStep);
+  }, [maxStep, step]);
 
   useEffect(() => {
     if (!initialDraft) return;
@@ -608,6 +657,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
   );
   const [sectionPrompts, setSectionPrompts] = useState<Record<NonCodingSectionKey, SectionPromptItem[]>>(() => {
     const initial: Record<NonCodingSectionKey, SectionPromptItem[]> = {
+      ui_preview: [{ id: 1, value: sectionDefaultPrompt.ui_preview }],
       scenario: [{ id: 1, value: sectionDefaultPrompt.scenario }],
       portfolio_link: [{ id: 1, value: sectionDefaultPrompt.portfolio_link }],
       short_answer: [{ id: 1, value: sectionDefaultPrompt.short_answer }],
@@ -711,12 +761,19 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
   const nonCodingEnabledSections = enabledSections.filter((section) =>
     nonCodingSectionKeys.includes(section as NonCodingSectionKey)
   ) as NonCodingSectionKey[];
+  const canUseUiPreview = roleCategory === "frontend";
+  const selectableSectionOptions = canUseUiPreview
+    ? sectionOptions
+    : sectionOptions.filter((section) => section.key !== "ui_preview");
 
   const sectionConfigsPayload = nonCodingEnabledSections.flatMap((sectionKey) =>
     (sectionPrompts[sectionKey] || []).map((item) => ({
       key: sectionKey,
       title: getSectionLabel(sectionKey),
-      prompt: item.value?.trim() || sectionDefaultPrompt[sectionKey],
+      prompt:
+        sectionKey === "ui_preview"
+          ? buildUiPreviewPrompt(parseUiPreviewPrompt(item.value || ""))
+          : item.value?.trim() || sectionDefaultPrompt[sectionKey],
       instructions: "",
       required: true,
     }))
@@ -748,6 +805,97 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
       }));
       return { ...prev, [section]: normalized };
     });
+    setUiPreviewUploadErrors((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
+    );
+    setUiPreviewUploading((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
+    );
+  };
+
+  useEffect(() => {
+    if (canUseUiPreview) return;
+    if (!enabledSections.includes("ui_preview")) return;
+    setEnabledSections((prev) => prev.filter((item) => item !== "ui_preview"));
+  }, [canUseUiPreview, enabledSections]);
+
+  const readUiPreviewError = (section: NonCodingSectionKey, id: number) =>
+    uiPreviewUploadErrors[`${section}-${id}`] || "";
+
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Failed to read image file"));
+      reader.readAsDataURL(file);
+    });
+
+  const applyUiPreviewFile = async (
+    section: NonCodingSectionKey,
+    id: number,
+    file: File,
+    currentValue: UiPreviewPromptPayload
+  ) => {
+    const errorKey = `${section}-${id}`;
+    const typeOk = file.type.startsWith("image/");
+    if (!typeOk) {
+      setUiPreviewUploadErrors((prev) => ({
+        ...prev,
+        [errorKey]: "Only image files are allowed (PNG/JPG/WebP).",
+      }));
+      return;
+    }
+    if (file.size > 1_500_000) {
+      setUiPreviewUploadErrors((prev) => ({
+        ...prev,
+        [errorKey]: "Image is too large. Use image up to 1.5MB.",
+      }));
+      return;
+    }
+
+    try {
+      setUiPreviewUploading((prev) => ({ ...prev, [errorKey]: true }));
+      const dataUrl = await readFileAsDataUrl(file);
+
+      if (!token) {
+        upsertSectionPrompt(
+          section,
+          id,
+          buildUiPreviewPrompt({
+            ...currentValue,
+            referenceImageUrl: dataUrl,
+          })
+        );
+      } else {
+        const uploaded = await uploadAdminUiPreviewImage(token, {
+          dataUrl,
+          fileName: file.name,
+        });
+        upsertSectionPrompt(
+          section,
+          id,
+          buildUiPreviewPrompt({
+            ...currentValue,
+            referenceImageUrl: uploaded.url,
+          })
+        );
+      }
+
+      setUiPreviewUploadErrors((prev) => {
+        const next = { ...prev };
+        delete next[errorKey];
+        return next;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to upload image";
+      setUiPreviewUploadErrors((prev) => ({ ...prev, [errorKey]: message }));
+    } finally {
+      setUiPreviewUploading((prev) => {
+        const next = { ...prev };
+        delete next[errorKey];
+        return next;
+      });
+    }
   };
 
   function handleNext() {
@@ -830,7 +978,10 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
         setTotalCodingTasks("0");
       }
     }
-    setStep((prev) => getNextStep(prev));
+    setStep((prev) => {
+      const next = getNextStep(prev);
+      return (next > maxStep ? maxStep : next) as CreateTestStep;
+    });
   }
 
   async function handlePublishTest() {
@@ -966,8 +1117,9 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
             <CreateTestStepper
               currentStep={step}
               isDark={isDark}
-              includeCodingStep
+              includeCodingStep={!isFrontendRole && codingSectionEnabled}
               stepThreeLabel={codingSectionEnabled ? "Coding Tasks" : "Assessment"}
+              customSteps={isFrontendRole ? frontendStepperSteps : undefined}
             />
 
             {step === 1 ? (
@@ -1104,7 +1256,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                   <div className={`mt-4 rounded-[10px] border p-4 ${isDark ? "border-slate-700 bg-slate-900" : "border-[#e2e8f0] bg-[#f8fafc]"}`}>
                     <p className={`mb-3 text-sm font-medium ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>Custom Sections (Other)</p>
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                      {sectionOptions.map((section) => {
+                      {selectableSectionOptions.map((section) => {
                         const checked = enabledSections.includes(section.key);
                         return (
                           <button
@@ -1213,8 +1365,8 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
               </CreateTestCard>
             ) : null}
 
-            {step === 3 ? (
-              codingSectionEnabled ? (
+            {((!isFrontendRole && step === 3) || (isFrontendRole && (step === 3 || step === 4))) ? (
+              codingSectionEnabled && !isFrontendRole ? (
                 <CreateTestCard
                   title="Add Coding Tasks"
                   subtitle={`${codingTasks.length} Tasks Added`}
@@ -1394,18 +1546,34 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                 </CreateTestCard>
               ) : (
                 <CreateTestCard
-                  title="Assessment Sections"
-                  subtitle={`${enabledSections.filter((section) => nonCodingSectionKeys.includes(section as NonCodingSectionKey)).length} Sections Enabled`}
+                  title={isFrontendRole && step === 3 ? "UI Preview Task" : "Assessment Sections"}
+                  subtitle={`${
+                    enabledSections
+                      .filter((section) => nonCodingSectionKeys.includes(section as NonCodingSectionKey))
+                      .filter((section) => {
+                        if (isFrontendRole && step === 3) return section === "ui_preview";
+                        if (isFrontendRole && step === 4) return section !== "ui_preview";
+                        return true;
+                      }).length
+                  } Sections Enabled`}
                   isDark={isDark}
                 >
                   <div className="space-y-4">
                     {enabledSections
                       .filter((section) => nonCodingSectionKeys.includes(section as NonCodingSectionKey))
+                      .filter((section) => {
+                        if (isFrontendRole && step === 3) return section === "ui_preview";
+                        if (isFrontendRole && step === 4) return section !== "ui_preview";
+                        return true;
+                      })
                       .map((section) => {
                         const sectionKey = section as NonCodingSectionKey;
                         const items = sectionPrompts[sectionKey] || [];
                         const isPortfolio = sectionKey === "portfolio_link";
-                        const isLong = sectionKey === "scenario" || sectionKey === "long_answer";
+                        const isLong =
+                          sectionKey === "scenario" ||
+                          sectionKey === "long_answer" ||
+                          sectionKey === "ui_preview";
 
                         return (
                           <article
@@ -1432,7 +1600,116 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                             <div className="space-y-2">
                               {items.map((item) => (
                                 <div key={`${sectionKey}-${item.id}`} className="flex items-start gap-2">
-                                  {isLong ? (
+                                  {sectionKey === "ui_preview" ? (
+                                    <div className="w-full space-y-2 rounded-[10px] border border-[#dbe3ef] p-3">
+                                      {(() => {
+                                        const parsed = parseUiPreviewPrompt(item.value || "");
+                                        return (
+                                          <>
+                                            <textarea
+                                              value={parsed.taskPrompt}
+                                              onChange={(event) =>
+                                                upsertSectionPrompt(
+                                                  sectionKey,
+                                                  item.id,
+                                                  buildUiPreviewPrompt({
+                                                    ...parsed,
+                                                    taskPrompt: event.target.value,
+                                                  })
+                                                )
+                                              }
+                                              className={`h-[96px] w-full resize-none rounded-[8px] border px-3 py-3 text-[16px] outline-none placeholder:text-[#98a2b3] ${
+                                                isDark
+                                                  ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-400"
+                                                  : "border-[#dbe3ef] bg-white text-[#0f172a]"
+                                              }`}
+                                              placeholder={sectionDefaultPrompt.ui_preview}
+                                            />
+                                            <input
+                                              value={parsed.referenceImageUrl}
+                                              onChange={(event) =>
+                                                upsertSectionPrompt(
+                                                  sectionKey,
+                                                  item.id,
+                                                  buildUiPreviewPrompt({
+                                                    ...parsed,
+                                                    referenceImageUrl: event.target.value,
+                                                  })
+                                                )
+                                              }
+                                              className={`h-[48px] w-full rounded-[8px] border px-3 text-[15px] outline-none placeholder:text-[#98a2b3] ${
+                                                isDark
+                                                  ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-400"
+                                                  : "border-[#dbe3ef] bg-white text-[#0f172a]"
+                                              }`}
+                                              placeholder="Reference image URL (https://...)"
+                                            />
+                                            <div
+                                              className={`rounded-[10px] border border-dashed p-3 ${
+                                                isDark
+                                                  ? "border-slate-600 bg-slate-800/40"
+                                                  : "border-[#cbd5e1] bg-[#f8fafc]"
+                                              }`}
+                                              onDragOver={(event) => {
+                                                event.preventDefault();
+                                              }}
+                                              onDrop={(event) => {
+                                                event.preventDefault();
+                                                const droppedFile = event.dataTransfer.files?.[0];
+                                                if (!droppedFile) return;
+                                                applyUiPreviewFile(sectionKey, item.id, droppedFile, parsed);
+                                              }}
+                                            >
+                                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <p className={`text-xs ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
+                                                  Drag & drop screenshot here
+                                                </p>
+                                                <span className={`text-xs ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>
+                                                  PNG/JPG/WebP up to 1.5MB
+                                                </span>
+                                              </div>
+                                              <div className="mt-2 flex items-center justify-between">
+                                              <label
+                                                htmlFor={`ui-preview-upload-${item.id}`}
+                                                className="inline-flex cursor-pointer items-center rounded-[8px] border border-[#1f3a8a] px-3 py-2 text-sm font-medium text-[#1f3a8a]"
+                                              >
+                                                Upload Screenshot
+                                              </label>
+                                              <input
+                                                id={`ui-preview-upload-${item.id}`}
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={(event) => {
+                                                  const file = event.target.files?.[0];
+                                                  if (!file) return;
+                                                  applyUiPreviewFile(sectionKey, item.id, file, parsed);
+                                                  event.currentTarget.value = "";
+                                                }}
+                                              />
+                                              <span className={`text-xs ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>
+                                                or click to upload
+                                              </span>
+                                              </div>
+                                            </div>
+                                            {readUiPreviewError(sectionKey, item.id) ? (
+                                              <p className="text-xs text-red-600">{readUiPreviewError(sectionKey, item.id)}</p>
+                                            ) : null}
+                                            {uiPreviewUploading[`${sectionKey}-${item.id}`] ? (
+                                              <p className={`text-xs ${isDark ? "text-slate-300" : "text-[#1f3a8a]"}`}>Uploading screenshot...</p>
+                                            ) : null}
+                                            {parsed.referenceImageUrl ? (
+                                              <img
+                                                src={parsed.referenceImageUrl}
+                                                alt="UI task reference"
+                                                className="max-h-[220px] w-full rounded-[8px] border border-[#dbe3ef] object-contain"
+                                              />
+                                            ) : null}
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  ) : isLong ? (
                                     <textarea
                                       value={item.value}
                                       onChange={(event) => upsertSectionPrompt(sectionKey, item.id, event.target.value)}
@@ -1470,7 +1747,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
               )
             ) : null}
 
-            {step === 4 ? (
+            {((!isFrontendRole && step === 4) || (isFrontendRole && step === 5)) ? (
               <CreateTestCard
                 title="Security Configuration"
                 subtitle="Configure Proctoring And Security Settings"
@@ -1568,7 +1845,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
               </CreateTestCard>
             ) : null}
 
-            {step === 5 ? (
+            {((!isFrontendRole && step === 5) || (isFrontendRole && step === 6)) ? (
               <CreateTestCard
                 title="Review & Publish"
                 subtitle="Review Your Test Configuration Before Publishing"
@@ -1629,7 +1906,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
 
             <CreateTestActionButtons
               showPrevious={step > 1}
-              showNext={step < 5}
+              showNext={step < maxStep}
               onPrevious={() => setStep((prev) => getPreviousStep(prev))}
               onNext={handleNext}
             />

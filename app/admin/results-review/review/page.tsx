@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { AdminResultReviewDetailScreen } from "@/components/admin/screens/AdminResultReviewDetailScreen";
+import { AdminRouteGuard } from "@/components/shared/guards/AdminRouteGuard";
 
 function AdminResultsReviewDetailPageContent() {
   const searchParams = useSearchParams();
@@ -12,8 +13,10 @@ function AdminResultsReviewDetailPageContent() {
 
 export default function AdminResultsReviewDetailPage() {
   return (
-    <Suspense fallback={null}>
-      <AdminResultsReviewDetailPageContent />
-    </Suspense>
+    <AdminRouteGuard>
+      <Suspense fallback={null}>
+        <AdminResultsReviewDetailPageContent />
+      </Suspense>
+    </AdminRouteGuard>
   );
 }
