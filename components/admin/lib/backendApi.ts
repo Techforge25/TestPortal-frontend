@@ -73,6 +73,7 @@ type BackendTest = {
     prompt: string;
     instructions?: string;
     required?: boolean;
+    marks?: number;
   }>;
 };
 
@@ -209,6 +210,7 @@ export type SaveAdminTestPayload = {
     prompt: string;
     instructions?: string;
     required?: boolean;
+    marks?: number;
   }>;
   status: "draft" | "active";
   warningLimit: number;
@@ -373,6 +375,7 @@ type CandidateLoginResponse = {
       prompt: string;
       instructions?: string;
       required?: boolean;
+      marks?: number;
     }>;
   };
   submission: {

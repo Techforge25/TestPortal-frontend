@@ -61,6 +61,7 @@ type CandidateSession = {
       prompt: string;
       instructions?: string;
       required?: boolean;
+      marks?: number;
     }>;
   };
   candidate: {

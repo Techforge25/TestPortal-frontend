@@ -12,6 +12,7 @@ export type AdminTestListItem = {
     prompt: string;
     instructions?: string;
     required?: boolean;
+    marks?: number;
   }>;
   mcqs: number;
   coding: number;

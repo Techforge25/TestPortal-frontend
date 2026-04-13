@@ -144,7 +144,7 @@ const sectionOptions = [
   { key: "short_answer", label: "Short Answer" },
   { key: "long_answer", label: "Long Answer" },
   { key: "scenario", label: "Scenario" },
-  { key: "portfolio_link", label: "Portfoilio / Assigement" },
+  { key: "portfolio_link", label: "Portfolio / Assignment" },
   { key: "bug_report", label: "Bug Report" },
   { key: "test_case", label: "Test Case" },
 ] as const;
@@ -156,6 +156,7 @@ type NonCodingSectionKey = Exclude<SectionKey, "mcq" | "coding">;
 type SectionPromptItem = {
   id: number;
   value: string;
+  marks: string;
 };
 
 type UiPreviewPromptPayload = {
@@ -657,13 +658,13 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
   );
   const [sectionPrompts, setSectionPrompts] = useState<Record<NonCodingSectionKey, SectionPromptItem[]>>(() => {
     const initial: Record<NonCodingSectionKey, SectionPromptItem[]> = {
-      ui_preview: [{ id: 1, value: sectionDefaultPrompt.ui_preview }],
-      scenario: [{ id: 1, value: sectionDefaultPrompt.scenario }],
-      portfolio_link: [{ id: 1, value: sectionDefaultPrompt.portfolio_link }],
-      short_answer: [{ id: 1, value: sectionDefaultPrompt.short_answer }],
-      long_answer: [{ id: 1, value: sectionDefaultPrompt.long_answer }],
-      bug_report: [{ id: 1, value: sectionDefaultPrompt.bug_report }],
-      test_case: [{ id: 1, value: sectionDefaultPrompt.test_case }],
+      ui_preview: [{ id: 1, value: sectionDefaultPrompt.ui_preview, marks: "10" }],
+      scenario: [{ id: 1, value: sectionDefaultPrompt.scenario, marks: "0" }],
+      portfolio_link: [{ id: 1, value: sectionDefaultPrompt.portfolio_link, marks: "0" }],
+      short_answer: [{ id: 1, value: sectionDefaultPrompt.short_answer, marks: "0" }],
+      long_answer: [{ id: 1, value: sectionDefaultPrompt.long_answer, marks: "0" }],
+      bug_report: [{ id: 1, value: sectionDefaultPrompt.bug_report, marks: "0" }],
+      test_case: [{ id: 1, value: sectionDefaultPrompt.test_case, marks: "0" }],
     };
     const configs = initialDraft?.sectionConfigs || [];
     if (!configs.length) return initial;
@@ -673,6 +674,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
         initial[key] = matched.map((config, index) => ({
           id: index + 1,
           value: config.prompt || sectionDefaultPrompt[key],
+          marks: String(Number.isFinite(Number((config as { marks?: number })?.marks)) ? Number((config as { marks?: number })?.marks) : key === "ui_preview" ? 10 : 0),
         }));
       }
     }
@@ -776,6 +778,10 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
           : item.value?.trim() || sectionDefaultPrompt[sectionKey],
       instructions: "",
       required: true,
+      marks:
+        sectionKey === "ui_preview"
+          ? Number.parseInt(item.marks || "10", 10) || 10
+          : 0,
     }))
   );
 
@@ -786,12 +792,20 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     }));
   };
 
+  const upsertSectionMarks = (section: NonCodingSectionKey, id: number, marks: string) => {
+    const sanitized = marks.replace(/[^0-9]/g, "");
+    setSectionPrompts((prev) => ({
+      ...prev,
+      [section]: prev[section].map((item) => (item.id === id ? { ...item, marks: sanitized } : item)),
+    }));
+  };
+
   const addSectionPrompt = (section: NonCodingSectionKey) => {
     setSectionPrompts((prev) => {
       const nextId = prev[section].length + 1;
       return {
         ...prev,
-        [section]: [...prev[section], { id: nextId, value: sectionDefaultPrompt[section] }],
+        [section]: [...prev[section], { id: nextId, value: sectionDefaultPrompt[section], marks: section === "ui_preview" ? "10" : "0" }],
       };
     });
   };
@@ -799,7 +813,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
   const deleteSectionPrompt = (section: NonCodingSectionKey, id: number) => {
     setSectionPrompts((prev) => {
       const remaining = prev[section].filter((item) => item.id !== id);
-      const normalized = (remaining.length > 0 ? remaining : [{ id: 1, value: "" }]).map((item, idx) => ({
+      const normalized = (remaining.length > 0 ? remaining : [{ id: 1, value: "", marks: section === "ui_preview" ? "10" : "0" }]).map((item, idx) => ({
         ...item,
         id: idx + 1,
       }));
@@ -1728,6 +1742,20 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                                       placeholder={isPortfolio ? "https://portfolio-link.com" : sectionDefaultPrompt[sectionKey]}
                                     />
                                   )}
+                                  {sectionKey === "ui_preview" ? (
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <span className={`text-[30px] [zoom:0.5] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>Marks:</span>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={item.marks || "10"}
+                                        onChange={(event) => upsertSectionMarks(sectionKey, item.id, event.target.value)}
+                                        className={`h-9 w-[96px] rounded-[8px] border px-2 outline-none ${
+                                          isDark ? "border-slate-600 bg-slate-800 text-slate-100" : "border-[#dbe3ef] text-[#0f172a]"
+                                        }`}
+                                      />
+                                    </div>
+                                  ) : null}
                                   <button
                                     type="button"
                                     onClick={() => deleteSectionPrompt(sectionKey, item.id)}

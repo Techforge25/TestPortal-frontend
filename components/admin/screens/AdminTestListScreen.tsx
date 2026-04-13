@@ -111,6 +111,29 @@ type AdminTestListScreenProps = {
   initialThemeDark?: boolean;
 };
 
+function formatRoleCategory(roleCategory?: AdminTestListItem["roleCategory"]) {
+  switch (roleCategory) {
+    case "developer":
+      return "Developer";
+    case "frontend":
+      return "Frontend";
+    case "designer":
+      return "Designer";
+    case "video_editor":
+      return "Video Editor";
+    case "qa_manual":
+      return "QA Manual";
+    case "hr":
+      return "HR";
+    case "sales":
+      return "Sales";
+    case "other":
+      return "Other";
+    default:
+      return "Developer";
+  }
+}
+
 export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListScreenProps) {
   const router = useRouter();
   const { isDark, toggleTheme } = useAdminTheme(initialThemeDark);
@@ -309,11 +332,12 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
 
             <section className={`rounded-[18px] border p-4 ${isDark ? "border-slate-700 bg-slate-900" : "border-[#e2e8f0] bg-white"}`}>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1200px] border-separate border-spacing-y-3">
+                <table className="w-full min-w-[1320px] border-separate border-spacing-y-3">
                   <thead>
                     <tr className={`${isDark ? "bg-slate-800 text-slate-300" : "bg-[#f3f4f6] text-[#475569]"}`}>
                       <th className="rounded-l-[8px] px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Test Name</th>
                       <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Position</th>
+                      <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Role Category</th>
                       <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Duration</th>
                       <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">MCQs</th>
                       <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Coding</th>
@@ -332,6 +356,9 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
                         </td>
                         <td className={`px-4 py-3 text-center text-[18px] leading-7 [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
                           {row.position}
+                        </td>
+                        <td className={`px-4 py-3 text-center text-[16px] [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
+                          {formatRoleCategory(row.roleCategory)}
                         </td>
                         <td className={`px-4 py-3 text-center text-[16px] [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
                           {row.duration} min
