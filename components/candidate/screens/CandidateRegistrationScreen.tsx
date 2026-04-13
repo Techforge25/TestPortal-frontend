@@ -31,8 +31,6 @@ type FormState = {
   workExperience: string;
   startDate: string;
   endDate: string;
-  currentSalary: string;
-  expectedSalary: string;
   expectedJoiningDate: string;
   shiftComfortable: string;
 };
@@ -50,8 +48,6 @@ const initialState: FormState = {
   workExperience: "",
   startDate: "",
   endDate: "",
-  currentSalary: "",
-  expectedSalary: "",
   expectedJoiningDate: "",
   shiftComfortable: "",
 };
@@ -63,7 +59,7 @@ const topFields: FieldConfig[] = [
   { key: "cnic", label: "Cnic Num", placeholder: "12345-1234567-1" },
   { key: "maritalStatus", label: "Marital Status", placeholder: "Select Marital Status" },
   { key: "qualification", label: "Qualification", placeholder: "BSCS" },
-  { key: "dateOfBirth", label: "Date of Birth", placeholder: "28/02/2003", type: "date" },
+  { key: "dateOfBirth", label: "Date of Birth", placeholder: "dd/mm/yyyy" },
   { key: "positionAppliedFor", label: "Position Applied For", placeholder: "Front End Developer", full: true },
   {
     key: "residentialAddress",
@@ -72,14 +68,12 @@ const topFields: FieldConfig[] = [
     full: true,
   },
   { key: "workExperience", label: "Work Experience", placeholder: "Frontend Developer", full: true },
-  { key: "startDate", label: "Start Date", placeholder: "12/05/2024", type: "date" },
-  { key: "endDate", label: "End Date", placeholder: "28/08/2025", type: "date" },
+  { key: "startDate", label: "Start Date", placeholder: "dd/mm/yyyy" },
+  { key: "endDate", label: "End Date", placeholder: "dd/mm/yyyy" },
 ];
 
 const bottomFields: FieldConfig[] = [
-  { key: "currentSalary", label: "Current Salary", placeholder: "50,000", type: "number" },
-  { key: "expectedSalary", label: "Expected Salary", placeholder: "60,000", type: "number" },
-  { key: "expectedJoiningDate", label: "Expected Date of Joining", placeholder: "12/05/2024", type: "date" },
+  { key: "expectedJoiningDate", label: "Expected Date of Joining", placeholder: "dd/mm/yyyy" },
   { key: "shiftComfortable", label: "Comfortable with 9 AM-6 PM shift?", placeholder: "Select Option" },
 ];
 
@@ -96,8 +90,6 @@ const requiredFields: Array<{ key: keyof FormState; label: string }> = [
   { key: "workExperience", label: "Work Experience" },
   { key: "startDate", label: "Start Date" },
   { key: "endDate", label: "End Date" },
-  { key: "currentSalary", label: "Current Salary" },
-  { key: "expectedSalary", label: "Expected Salary" },
   { key: "expectedJoiningDate", label: "Expected Date of Joining" },
   { key: "shiftComfortable", label: "Comfortable with 9 AM-6 PM shift?" },
 ];
@@ -141,6 +133,56 @@ function formatCnic(value: string) {
   return `${first}-${second}-${third}`;
 }
 
+const dateFieldKeys: Array<keyof FormState> = ["dateOfBirth", "startDate", "endDate", "expectedJoiningDate"];
+
+function formatDateInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+  if (digits.length <= 2) return day;
+  if (digits.length <= 4) return `${day}/${month}`;
+  return `${day}/${month}/${year}`;
+}
+
+function parseDateToTimestamp(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return NaN;
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [day, month, year] = raw.split("/");
+    const iso = `${year}-${month}-${day}`;
+    const parsed = new Date(`${iso}T00:00:00`).getTime();
+    return Number.isFinite(parsed) ? parsed : NaN;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const parsed = new Date(`${raw}T00:00:00`).getTime();
+    return Number.isFinite(parsed) ? parsed : NaN;
+  }
+
+  return NaN;
+}
+
+function normalizeDateForApi(value: string) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  const [day, month, year] = raw.split("/");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeDateForInput(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  return formatDateInput(raw);
+}
+
 function BrandMark() {
   return (
     <svg viewBox="0 0 50 34" className="h-[62px] w-[92px]" fill="none" aria-hidden="true">
@@ -148,6 +190,253 @@ function BrandMark() {
       <path d="M10 16L16 22L27 11" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M30 23C33 21.5 35 19 36 15" stroke="#15A8FF" strokeWidth="3" strokeLinecap="round" />
     </svg>
+  );
+}
+
+function CalendarInput({
+  label,
+  value,
+  placeholder,
+  onChange,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const parsed = /^\d{2}\/\d{2}\/\d{4}$/.test(value) ? value.split("/") : null;
+  const today = new Date();
+  const selectedDay = parsed ? Number(parsed[0]) : null;
+  const selectedMonth = parsed ? Number(parsed[1]) - 1 : null;
+  const selectedYear = parsed ? Number(parsed[2]) : null;
+  const [isOpen, setIsOpen] = useState(false);
+  const [opensAbove, setOpensAbove] = useState(false);
+  const [viewMonth, setViewMonth] = useState(selectedMonth ?? today.getMonth());
+  const [viewYear, setViewYear] = useState(selectedYear ?? today.getFullYear());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (panelRef.current) {
+      const rect = panelRef.current.getBoundingClientRect();
+      const estimatedPanelHeight = 360;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpensAbove(spaceBelow < estimatedPanelHeight && rect.top > estimatedPanelHeight);
+    }
+    const onClickOutside = (event: MouseEvent) => {
+      if (!panelRef.current) return;
+      if (!panelRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const onEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    window.addEventListener("mousedown", onClickOutside);
+    window.addEventListener("keydown", onEsc);
+    return () => {
+      window.removeEventListener("mousedown", onClickOutside);
+      window.removeEventListener("keydown", onEsc);
+    };
+  }, [isOpen]);
+
+  function openCalendar() {
+    if (selectedMonth !== null && selectedYear !== null) {
+      setViewMonth(selectedMonth);
+      setViewYear(selectedYear);
+    }
+    setIsOpen((prev) => !prev);
+  }
+
+  function daysInMonth(year: number, month: number) {
+    return new Date(year, month + 1, 0).getDate();
+  }
+
+  function formatFromParts(day: number, month: number, year: number) {
+    const dd = String(day).padStart(2, "0");
+    const mm = String(month + 1).padStart(2, "0");
+    return `${dd}/${mm}/${year}`;
+  }
+
+  function shiftMonth(delta: number) {
+    const next = new Date(viewYear, viewMonth + delta, 1);
+    setViewMonth(next.getMonth());
+    setViewYear(next.getFullYear());
+  }
+
+  function changeYear(nextYear: number) {
+    if (!Number.isFinite(nextYear)) return;
+    const safeYear = Math.min(2100, Math.max(1970, Math.trunc(nextYear)));
+    setViewYear(safeYear);
+  }
+
+  function shiftYear(delta: number) {
+    changeYear(viewYear + delta);
+  }
+
+  function selectDate(day: number, month: number, year: number) {
+    onChange(formatFromParts(day, month, year));
+    setIsOpen(false);
+  }
+
+  function clearDate() {
+    onChange("");
+    setIsOpen(false);
+  }
+
+  function setToday() {
+    onChange(formatFromParts(today.getDate(), today.getMonth(), today.getFullYear()));
+    setIsOpen(false);
+  }
+
+  const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const weekNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const currentMonthDays = daysInMonth(viewYear, viewMonth);
+  const prevMonthDate = new Date(viewYear, viewMonth - 1, 1);
+  const prevMonthDays = daysInMonth(prevMonthDate.getFullYear(), prevMonthDate.getMonth());
+  const cells: Array<{ day: number; month: number; year: number; inMonth: boolean }> = [];
+
+  for (let i = firstDay - 1; i >= 0; i--) {
+    cells.push({
+      day: prevMonthDays - i,
+      month: prevMonthDate.getMonth(),
+      year: prevMonthDate.getFullYear(),
+      inMonth: false,
+    });
+  }
+  for (let day = 1; day <= currentMonthDays; day++) {
+    cells.push({ day, month: viewMonth, year: viewYear, inMonth: true });
+  }
+  while (cells.length < 42) {
+    const nextDay = cells.length - (firstDay + currentMonthDays) + 1;
+    const nextDate = new Date(viewYear, viewMonth + 1, 1);
+    cells.push({
+      day: nextDay,
+      month: nextDate.getMonth(),
+      year: nextDate.getFullYear(),
+      inMonth: false,
+    });
+  }
+
+  return (
+    <label className={`block ${className}`}>
+      <span className="mb-3 block text-[18px] text-[#0f172a]">{label}</span>
+      <div className="relative" ref={panelRef}>
+        <input
+          type="text"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          inputMode="numeric"
+          className="h-[52px] w-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 pr-12 text-slate-900 outline-none placeholder:text-[#9ca3af] focus:border-[#1f3a8a]"
+        />
+        <button
+          type="button"
+          onClick={openCalendar}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-2 text-[#64748b] transition hover:bg-[#eef2ff] hover:text-[#1f3a8a]"
+          aria-label={`Open ${label} calendar`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" className="size-5">
+            <rect x="3.5" y="5.5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.7" />
+            <path d="M7 3.5V7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            <path d="M17 3.5V7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            <path d="M3.5 9.5H20.5" stroke="currentColor" strokeWidth="1.7" />
+          </svg>
+        </button>
+        {isOpen ? (
+          <div
+            className={`absolute right-0 z-40 w-[320px] rounded-xl border border-[#dbe3ef] bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.18)] ${
+              opensAbove ? "bottom-[58px]" : "top-[58px]"
+            }`}
+          >
+            <div className="mb-3 rounded-lg border border-[#dbe3ef] bg-[#f8fbff] p-2">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(-1)}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-[#64748b] transition hover:bg-[#e6eeff] hover:text-[#1f3a8a]"
+                  aria-label="Previous month"
+                >
+                  <svg viewBox="0 0 20 20" fill="none" className="size-4"><path d="M12.5 4.5L7 10L12.5 15.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+                <p className="text-[15px] font-semibold tracking-[-0.2px] text-[#0f172a]">
+                  {monthNames[viewMonth]} {viewYear}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(1)}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-[#64748b] transition hover:bg-[#e6eeff] hover:text-[#1f3a8a]"
+                  aria-label="Next month"
+                >
+                  <svg viewBox="0 0 20 20" fill="none" className="size-4"><path d="M7.5 4.5L13 10L7.5 15.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+              <div className="mt-2 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => shiftYear(-1)}
+                  className="flex h-7 w-7 items-center justify-center rounded border border-[#dbe3ef] bg-white text-[#64748b] transition hover:bg-[#eef2ff] hover:text-[#1f3a8a]"
+                  aria-label="Previous year"
+                >
+                  -
+                </button>
+                <input
+                  type="number"
+                  min={1970}
+                  max={2100}
+                  value={viewYear}
+                  onChange={(event) => changeYear(Number(event.target.value))}
+                  className="h-7 w-[84px] rounded border border-[#dbe3ef] bg-white px-1 text-center text-sm font-semibold text-[#0f172a] outline-none focus:border-[#1f3a8a]"
+                />
+                <button
+                  type="button"
+                  onClick={() => shiftYear(1)}
+                  className="flex h-7 w-7 items-center justify-center rounded border border-[#dbe3ef] bg-white text-[#64748b] transition hover:bg-[#eef2ff] hover:text-[#1f3a8a]"
+                  aria-label="Next year"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div className="mb-1 grid grid-cols-7 gap-1">
+              {weekNames.map((day) => (
+                <div key={day} className="h-8 text-center text-xs font-semibold text-[#64748b] leading-8">{day}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {cells.map((cell, index) => {
+                const isSelected =
+                  selectedDay === cell.day && selectedMonth === cell.month && selectedYear === cell.year;
+                return (
+                  <button
+                    key={`${cell.year}-${cell.month}-${cell.day}-${index}`}
+                    type="button"
+                    onClick={() => selectDate(cell.day, cell.month, cell.year)}
+                    className={`h-9 rounded-md text-sm transition ${
+                      isSelected
+                        ? "bg-[#1f3a8a] text-white"
+                        : cell.inMonth
+                          ? "text-[#0f172a] hover:bg-[#eef2ff]"
+                          : "text-[#9ca3af] hover:bg-[#f8fafc]"
+                    }`}
+                  >
+                    {cell.day}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex items-center justify-between border-t border-[#edf2f7] pt-2">
+              <button type="button" onClick={clearDate} className="text-sm font-medium text-[#2563eb] hover:text-[#1d4ed8]">Clear</button>
+              <button type="button" onClick={setToday} className="text-sm font-medium text-[#2563eb] hover:text-[#1d4ed8]">Today</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </label>
   );
 }
 
@@ -184,18 +473,16 @@ export function CandidateRegistrationScreen() {
           cnic: prefill.candidateProfile?.cnic || prev.cnic,
           maritalStatus: prefill.candidateProfile?.maritalStatus || prev.maritalStatus,
           qualification: prefill.candidateProfile?.qualification || prev.qualification,
-          dateOfBirth: prefill.candidateProfile?.dateOfBirth || prev.dateOfBirth,
+          dateOfBirth: normalizeDateForInput(prefill.candidateProfile?.dateOfBirth || prev.dateOfBirth),
           positionAppliedFor:
             prefill.candidateProfile?.positionAppliedFor || prev.positionAppliedFor,
           residentialAddress:
             prefill.candidateProfile?.residentialAddress || prev.residentialAddress,
           workExperience: prefill.candidateProfile?.workExperience || prev.workExperience,
-          startDate: prefill.candidateProfile?.startDate || prev.startDate,
-          endDate: prefill.candidateProfile?.endDate || prev.endDate,
-          currentSalary: prefill.candidateProfile?.currentSalary || prev.currentSalary,
-          expectedSalary: prefill.candidateProfile?.expectedSalary || prev.expectedSalary,
+          startDate: normalizeDateForInput(prefill.candidateProfile?.startDate || prev.startDate),
+          endDate: normalizeDateForInput(prefill.candidateProfile?.endDate || prev.endDate),
           expectedJoiningDate:
-            prefill.candidateProfile?.expectedJoiningDate || prev.expectedJoiningDate,
+            normalizeDateForInput(prefill.candidateProfile?.expectedJoiningDate || prev.expectedJoiningDate),
           shiftComfortable:
             prefill.candidateProfile?.shiftComfortable || prev.shiftComfortable,
         }));
@@ -205,8 +492,8 @@ export function CandidateRegistrationScreen() {
     })();
   }, [loginDraft]);
 
-  function setValue(key: keyof FormState, value: string) {
-    if (key === "fullName" || key === "positionAppliedFor" || key === "workExperience") {
+function setValue(key: keyof FormState, value: string) {
+    if (key === "fullName" || key === "positionAppliedFor") {
       setForm((prev) => ({ ...prev, [key]: sanitizeAlphabetOnly(value) }));
       return;
     }
@@ -216,6 +503,10 @@ export function CandidateRegistrationScreen() {
     }
     if (key === "cnic") {
       setForm((prev) => ({ ...prev, [key]: formatCnic(value) }));
+      return;
+    }
+    if (dateFieldKeys.includes(key)) {
+      setForm((prev) => ({ ...prev, [key]: formatDateInput(value) }));
       return;
     }
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -248,8 +539,8 @@ export function CandidateRegistrationScreen() {
       setError("Position Applied For must contain only alphabets.");
       return;
     }
-    if (!/^[A-Za-z\s]+$/.test(form.workExperience.trim())) {
-      setError("Work Experience must contain only alphabets.");
+    if (!/^[A-Za-z0-9\s.,()+\-_/]+$/.test(form.workExperience.trim())) {
+      setError("Work Experience contains invalid characters.");
       return;
     }
     if (!["Single", "Married"].includes(form.maritalStatus)) {
@@ -259,6 +550,27 @@ export function CandidateRegistrationScreen() {
     if (!["Yes", "No"].includes(form.shiftComfortable)) {
       setError("Please select Comfortable with 9 AM-6 PM shift?");
       return;
+    }
+    if (dateFieldKeys.some((key) => Number.isNaN(parseDateToTimestamp(form[key])))) {
+      setError("Please enter valid dates in DD/MM/YYYY format.");
+      return;
+    }
+    if (form.startDate && form.endDate) {
+      const start = parseDateToTimestamp(form.startDate);
+      const end = parseDateToTimestamp(form.endDate);
+      if (Number.isFinite(start) && Number.isFinite(end) && end < start) {
+        setError("End Date cannot be earlier than Start Date.");
+        return;
+      }
+      if (form.expectedJoiningDate) {
+        const joining = parseDateToTimestamp(form.expectedJoiningDate);
+        if (Number.isFinite(joining)) {
+          if (joining <= start || joining <= end) {
+            setError("Expected Date of Joining must be later than Start Date and End Date.");
+            return;
+          }
+        }
+      }
     }
 
     setIsSubmitting(true);
@@ -273,15 +585,13 @@ export function CandidateRegistrationScreen() {
           cnic: form.cnic,
           maritalStatus: form.maritalStatus,
           qualification: form.qualification,
-          dateOfBirth: form.dateOfBirth,
+          dateOfBirth: normalizeDateForApi(form.dateOfBirth),
           positionAppliedFor: form.positionAppliedFor,
           residentialAddress: form.residentialAddress,
           workExperience: form.workExperience,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          currentSalary: form.currentSalary,
-          expectedSalary: form.expectedSalary,
-          expectedJoiningDate: form.expectedJoiningDate,
+          startDate: normalizeDateForApi(form.startDate),
+          endDate: normalizeDateForApi(form.endDate),
+          expectedJoiningDate: normalizeDateForApi(form.expectedJoiningDate),
           shiftComfortable: form.shiftComfortable,
         },
       });
@@ -343,6 +653,15 @@ export function CandidateRegistrationScreen() {
                     ariaLabel={field.label}
                   />
                 </div>
+              ) : dateFieldKeys.includes(field.key) ? (
+                <CalendarInput
+                  key={field.key}
+                  label={field.label}
+                  value={form[field.key]}
+                  onChange={(value) => setValue(field.key, value)}
+                  placeholder={field.placeholder}
+                  className={field.full ? "md:col-span-2" : ""}
+                />
               ) : (
                 <AuthTextField
                   key={field.key}
@@ -379,6 +698,14 @@ export function CandidateRegistrationScreen() {
                     ariaLabel={field.label}
                   />
                 </div>
+              ) : dateFieldKeys.includes(field.key) ? (
+                <CalendarInput
+                  key={field.key}
+                  label={field.label}
+                  value={form[field.key]}
+                  onChange={(value) => setValue(field.key, value)}
+                  placeholder={field.placeholder}
+                />
               ) : (
                 <AuthTextField
                   key={field.key}

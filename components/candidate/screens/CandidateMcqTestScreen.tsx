@@ -304,17 +304,19 @@ export function CandidateMcqTestScreen() {
     <main className="flex min-h-screen flex-col bg-[#f8fafc]">
       <header className="flex w-full items-center">
         <div className="flex h-[76px] w-full max-w-[281px] items-center justify-center bg-[#1f3a8a] px-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center">
             {branding.logoDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={branding.logoDataUrl} alt="Company logo" className="h-[34px] w-[50px] rounded object-contain" />
+              <div className="relative h-[50px] w-[58px] overflow-hidden rounded">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={branding.logoDataUrl}
+                  alt="Company logo"
+                  className="h-full w-[230px] max-w-none object-cover object-left"
+                />
+              </div>
             ) : (
               <BrandMark />
             )}
-            <div className="leading-none text-white">
-              <p className="text-[24px] font-bold tracking-tight">{branding.companyName || "Hire Secure"}</p>
-              <p className="mt-1 text-[12px]">Secure Talent. Smart Decisions.</p>
-            </div>
           </div>
         </div>
 

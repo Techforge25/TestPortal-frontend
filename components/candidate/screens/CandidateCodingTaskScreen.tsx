@@ -169,18 +169,7 @@ export function CandidateCodingTaskScreen() {
         : fallbackCodingTasks,
     [session]
   );
-  const availableLanguageOptions = useMemo<DropdownOption[]>(() => {
-    const fromTasks = Array.from(
-      new Set(
-        codingTasks
-          .map((task) => normalizeLanguageValue(task.language))
-          .filter((item): item is string => Boolean(item))
-      )
-    );
-    if (!fromTasks.length) return allLanguageOptions;
-    const picked = allLanguageOptions.filter((item) => fromTasks.includes(item.value));
-    return picked.length > 0 ? picked : allLanguageOptions;
-  }, [codingTasks]);
+  const availableLanguageOptions: DropdownOption[] = allLanguageOptions;
   const [languageByTask, setLanguageByTask] = useState<Record<string, string>>({});
   const [codeByTask, setCodeByTask] = useState<Record<string, string>>(() =>
     Object.fromEntries(fallbackCodingTasks.map((task) => [task.id, task.starterCode])),
@@ -389,16 +378,22 @@ export function CandidateCodingTaskScreen() {
         <div className="flex h-full w-full max-w-[320px] items-center justify-center bg-[#1f3a8a] px-3">
           <div className="flex items-center justify-center">
             {branding.logoDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={branding.logoDataUrl} alt="Company logo" className="h-[64px] w-[220px] rounded object-contain" />
+              <div className="relative h-[58px] w-[66px] overflow-hidden rounded">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={branding.logoDataUrl}
+                  alt="Company logo"
+                  className="h-full w-[250px] max-w-none object-cover object-left"
+                />
+              </div>
             ) : (
               <BrandMark />
             )}
           </div>
         </div>
 
-        <div className="flex h-full w-full items-center gap-8 border-b border-[#3f3f46] bg-[#252526] px-8">
-          <div className="flex-1 text-[18px] font-medium text-white">
+        <div className="flex h-full w-full items-center gap-6 border-b border-[#3f3f46] bg-[#252526] px-8">
+          <div className="flex-1 pr-4 text-[18px] font-medium leading-7 text-white break-words">
             {`Task ${taskIndex + 1} of ${codingTasks.length}: ${activeTask.title}`}
           </div>
 
@@ -419,7 +414,7 @@ export function CandidateCodingTaskScreen() {
               selectedOptionClassName="bg-[#1f3a8a] text-white"
               chevronClassName="text-slate-200"
             />
-            <div className="flex h-[60px] w-[82px] items-center rounded-[8px] border border-[#4c4c4c] bg-[#3c3c3c] px-4 text-[18px] font-medium text-white">
+            <div className="flex h-[60px] w-[128px] items-center justify-center overflow-hidden rounded-[8px] border border-[#4c4c4c] bg-[#3c3c3c] px-3 font-mono text-[17px] font-semibold tracking-tight text-white">
               <CandidateCountdown deadlineAt={deadlineAt} />
             </div>
             <div className="flex h-[60px] items-center gap-[5px] whitespace-nowrap rounded-[8px] bg-[#4c3010] px-4">

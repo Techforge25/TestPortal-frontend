@@ -305,7 +305,7 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
                     </svg>
                   }
                 >
-                  Crate Test
+                  Create Test
                 </AppButton>
               </div>
             </section>

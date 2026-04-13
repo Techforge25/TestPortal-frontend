@@ -291,7 +291,7 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
                 className="min-w-[148px]"
                 onClick={() => router.push("/admin/create-test")}
               >
-                Crate Test
+                Create Test
               </AppButton>
             </section>
 
