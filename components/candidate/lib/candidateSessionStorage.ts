@@ -74,6 +74,7 @@ const CANDIDATE_SESSION_KEY = "candidate_test_session";
 const CANDIDATE_RESULT_KEY = "candidate_test_result";
 
 type CandidateTestResultSummary = {
+  submissionId?: string;
   mcqScore: number;
   mcqTotal: number;
   submittedAt: string;

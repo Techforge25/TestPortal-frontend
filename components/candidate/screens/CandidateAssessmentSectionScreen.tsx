@@ -259,7 +259,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
         itemIndex: config.index,
         answer: answers[config.index] || "",
       }));
-      await submitCandidateTest({
+      const response = await submitCandidateTest({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
         mcqAnswers,
@@ -271,8 +271,13 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       const mcqTotal = calculateMcqTotal(session.test.mcqQuestions || []);
       const mcqScore = calculateMcqScore(session.test.mcqQuestions || [], mcqAnswers);
       saveCandidateResultSummary({
-        mcqScore,
-        mcqTotal,
+        submissionId: session.submissionId,
+        mcqScore: Number.isFinite(Number(response.submission?.mcqScore))
+          ? Number(response.submission.mcqScore)
+          : mcqScore,
+        mcqTotal: Number.isFinite(Number(response.submission?.mcqTotal))
+          ? Number(response.submission.mcqTotal)
+          : mcqTotal,
         submittedAt: new Date().toISOString(),
         codingEvaluation: { status: "not_required", totalMarks: 0, maxMarks: 0 },
       });
@@ -352,7 +357,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
         return;
       }
 
-      await submitCandidateTest({
+      const response = await submitCandidateTest({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
         mcqAnswers: session.mcqAnswers || [],
@@ -363,8 +368,13 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       const mcqTotal = calculateMcqTotal(session.test.mcqQuestions || []);
       const mcqScore = calculateMcqScore(session.test.mcqQuestions || [], session.mcqAnswers || []);
       saveCandidateResultSummary({
-        mcqScore,
-        mcqTotal,
+        submissionId: session.submissionId,
+        mcqScore: Number.isFinite(Number(response.submission?.mcqScore))
+          ? Number(response.submission.mcqScore)
+          : mcqScore,
+        mcqTotal: Number.isFinite(Number(response.submission?.mcqTotal))
+          ? Number(response.submission.mcqTotal)
+          : mcqTotal,
         submittedAt: new Date().toISOString(),
         codingEvaluation: { status: "not_required", totalMarks: 0, maxMarks: 0 },
       });

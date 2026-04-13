@@ -174,7 +174,7 @@ export function CandidateMcqTestScreen() {
         questionIndex: Number(questionIndex),
         selectedOptionIndex,
       }));
-      await submitCandidateTest({
+      const response = await submitCandidateTest({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
         mcqAnswers,
@@ -185,9 +185,17 @@ export function CandidateMcqTestScreen() {
       });
       const mcqTotal = calculateMcqTotal(session.test.mcqQuestions || []);
       const mcqScore = calculateMcqScore(session.test.mcqQuestions || [], mcqAnswers);
+      const backendMcqScoreFallback = Number.isFinite(Number(response.submission?.totalScore))
+        ? Number(response.submission.totalScore)
+        : mcqScore;
       saveCandidateResultSummary({
-        mcqScore,
-        mcqTotal,
+        submissionId: session.submissionId,
+        mcqScore: Number.isFinite(Number(response.submission?.mcqScore))
+          ? Number(response.submission.mcqScore)
+          : backendMcqScoreFallback,
+        mcqTotal: Number.isFinite(Number(response.submission?.mcqTotal))
+          ? Number(response.submission.mcqTotal)
+          : mcqTotal,
         submittedAt: new Date().toISOString(),
         codingEvaluation: { status: "not_required", totalMarks: 0, maxMarks: 0 },
       });
@@ -231,7 +239,47 @@ export function CandidateMcqTestScreen() {
         return;
       }
     }
-    router.push(getRouteAfterMcq(session));
+    const nextRoute = getRouteAfterMcq(session);
+    if (nextRoute !== "/candidate/submitted") {
+      router.push(nextRoute);
+      return;
+    }
+
+    if (!session?.submissionId || !session?.candidateSessionToken) {
+      setError("Submission not found. Please login again.");
+      return;
+    }
+
+    try {
+      const response = await submitCandidateTest({
+        submissionId: session.submissionId,
+        candidateSessionToken: session.candidateSessionToken,
+        mcqAnswers,
+        codingAnswers: [],
+        sectionAnswers: session.sectionAnswers || [],
+      });
+      const mcqTotal = calculateMcqTotal(session.test.mcqQuestions || []);
+      const mcqScore = calculateMcqScore(session.test.mcqQuestions || [], mcqAnswers);
+      const backendMcqScoreFallback = Number.isFinite(Number(response.submission?.totalScore))
+        ? Number(response.submission.totalScore)
+        : mcqScore;
+      saveCandidateResultSummary({
+        submissionId: session.submissionId,
+        mcqScore: Number.isFinite(Number(response.submission?.mcqScore))
+          ? Number(response.submission.mcqScore)
+          : backendMcqScoreFallback,
+        mcqTotal: Number.isFinite(Number(response.submission?.mcqTotal))
+          ? Number(response.submission.mcqTotal)
+          : mcqTotal,
+        submittedAt: new Date().toISOString(),
+        codingEvaluation: { status: "not_required", totalMarks: 0, maxMarks: 0 },
+      });
+      clearRuntimeState(session.submissionId);
+      router.push("/candidate/submitted");
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Failed to submit test";
+      setError(message);
+    }
   }
 
   useEffect(() => {
@@ -302,7 +350,9 @@ export function CandidateMcqTestScreen() {
             <div className="mb-6 inline-flex items-center justify-center rounded-[8px] border border-[#162861] bg-[#f9faff] px-5 py-[10px]">
               <p className="text-[28px] font-semibold leading-[20px] text-[#162861] [zoom:0.64]">{`Q ${currentIndex + 1}`}</p>
             </div>
-            <p className="mb-6 px-2 text-[28px] font-medium leading-[20px] text-[#0f172a] [zoom:0.64]">{currentQuestion.text}</p>
+            <p className="mb-10 px-2 text-[28px] font-medium leading-[30px] text-[#0f172a] [zoom:0.64]">
+              {currentQuestion.text}
+            </p>
             <div className="space-y-[14px]">
               {currentQuestion.options.map((option, optionIndex) => (
                 <OptionItem

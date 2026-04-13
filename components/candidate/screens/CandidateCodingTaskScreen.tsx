@@ -25,6 +25,7 @@ type CodingTask = {
   id: string;
   title: string;
   description: string;
+  language: string;
   starterCode: string;
   examples: Array<{ input: string; output: string }>;
 };
@@ -39,13 +40,38 @@ type CodeRunResult = {
   memory: string;
 };
 
-const languageOptions: DropdownOption[] = [
+const allLanguageOptions: DropdownOption[] = [
   { value: "javascript", label: "JavaScript" },
   { value: "typescript", label: "TypeScript" },
   { value: "python", label: "Python" },
   { value: "java", label: "Java" },
   { value: "cpp", label: "C++" },
+  { value: "go", label: "Go" },
+  { value: "php", label: "PHP" },
+  { value: "ruby", label: "Ruby" },
+  { value: "dart", label: "Dart" },
 ];
+
+const languageAliasMap: Record<string, string> = {
+  js: "javascript",
+  javascript: "javascript",
+  ts: "typescript",
+  typescript: "typescript",
+  py: "python",
+  python: "python",
+  java: "java",
+  "c++": "cpp",
+  cpp: "cpp",
+  go: "go",
+  php: "php",
+  ruby: "ruby",
+  dart: "dart",
+};
+
+function normalizeLanguageValue(value: string): string | null {
+  const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
+  return languageAliasMap[normalized] || null;
+}
 
 const fallbackCodingTasks: CodingTask[] = [
   {
@@ -53,6 +79,7 @@ const fallbackCodingTasks: CodingTask[] = [
     title: "Two Sum",
     description:
       "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target. You may assume that each input would have exactly one solution, and you may not use the same element twice.",
+    language: "javascript",
     starterCode: "function solution(input) {\n  // Write your code here\n}",
     examples: [
       { input: "nums = [2,7,11,15], target = 9", output: "[0,1]" },
@@ -64,6 +91,7 @@ const fallbackCodingTasks: CodingTask[] = [
     title: "Reverse String",
     description:
       "Write a function that reverses a string without using built-in reverse methods. Return the reversed string as output.",
+    language: "javascript",
     starterCode: "function solution(input) {\n  // input: string\n  // output: reversed string\n}",
     examples: [
       { input: 's = "techforge"', output: '"egrofhcet"' },
@@ -75,6 +103,7 @@ const fallbackCodingTasks: CodingTask[] = [
     title: "Valid Parentheses",
     description:
       "Given a string containing just the characters ()[]{} determine if the input string is valid. Every opening bracket must be closed in the correct order.",
+    language: "javascript",
     starterCode: "function solution(input) {\n  // input: brackets string\n  // output: true or false\n}",
     examples: [
       { input: 's = "()[]{}"', output: "true" },
@@ -116,7 +145,6 @@ export function CandidateCodingTaskScreen() {
   const branding = usePublicBranding();
   const session = useMemo(() => readCandidateSession(), []);
   const [taskIndex, setTaskIndex] = useState(0);
-  const [language, setLanguage] = useState(languageOptions[0]?.value || "javascript");
   const [error, setError] = useState("");
   const [runError, setRunError] = useState("");
   const [runResult, setRunResult] = useState<CodeRunResult | null>(null);
@@ -131,6 +159,7 @@ export function CandidateCodingTaskScreen() {
             id: `task-${task.index + 1}`,
             title: task.title,
             description: task.description,
+            language: normalizeLanguageValue(task.language || "javascript") || "javascript",
             starterCode: "function solution(input) {\n  // Write your code here\n}",
             examples: [
               { input: task.sampleInput || "input = ...", output: task.sampleOutput || "..." },
@@ -140,21 +169,43 @@ export function CandidateCodingTaskScreen() {
         : fallbackCodingTasks,
     [session]
   );
+  const availableLanguageOptions = useMemo<DropdownOption[]>(() => {
+    const fromTasks = Array.from(
+      new Set(
+        codingTasks
+          .map((task) => normalizeLanguageValue(task.language))
+          .filter((item): item is string => Boolean(item))
+      )
+    );
+    if (!fromTasks.length) return allLanguageOptions;
+    const picked = allLanguageOptions.filter((item) => fromTasks.includes(item.value));
+    return picked.length > 0 ? picked : allLanguageOptions;
+  }, [codingTasks]);
+  const [languageByTask, setLanguageByTask] = useState<Record<string, string>>({});
   const [codeByTask, setCodeByTask] = useState<Record<string, string>>(() =>
     Object.fromEntries(fallbackCodingTasks.map((task) => [task.id, task.starterCode])),
   );
 
   const activeTask = codingTasks[taskIndex];
+  const activeLanguage =
+    languageByTask[activeTask?.id] ||
+    normalizeLanguageValue(activeTask?.language || "") ||
+    availableLanguageOptions[0]?.value ||
+    "javascript";
   const codeValue = codeByTask[activeTask.id] ?? activeTask.starterCode;
   const codeLines = codeValue.split("\n");
   const buildCodingAnswers = useCallback(
-    (currentLanguage: string) =>
+    () =>
       codingTasks.map((task, index) => ({
         taskIndex: index,
         code: codeByTask[task.id] || task.starterCode,
-        language: currentLanguage,
+        language:
+          languageByTask[task.id] ||
+          normalizeLanguageValue(task.language || "") ||
+          availableLanguageOptions[0]?.value ||
+          "javascript",
       })),
-    [codingTasks, codeByTask]
+    [codingTasks, codeByTask, languageByTask, availableLanguageOptions]
   );
 
   const { deadlineAt, warningCount, warningPopup, dismissWarningPopup } = useCandidateSecurityGuard({
@@ -166,7 +217,7 @@ export function CandidateCodingTaskScreen() {
       if (!session?.submissionId || !session.candidateSessionToken) return;
       const mcqAnswers = session.mcqAnswers || [];
       const sectionAnswers = session.sectionAnswers || [];
-      const codingAnswers = buildCodingAnswers(language);
+      const codingAnswers = buildCodingAnswers();
       const response = await submitCandidateTest({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
@@ -179,8 +230,13 @@ export function CandidateCodingTaskScreen() {
       const mcqTotal = calculateMcqTotal(session.test.mcqQuestions || []);
       const mcqScore = calculateMcqScore(session.test.mcqQuestions || [], mcqAnswers);
       saveCandidateResultSummary({
-        mcqScore: Math.min(mcqScore, response.submission.totalScore || mcqScore),
-        mcqTotal,
+        submissionId: session.submissionId,
+        mcqScore: Number.isFinite(Number(response.submission?.mcqScore))
+          ? Number(response.submission.mcqScore)
+          : Math.min(mcqScore, response.submission.totalScore || mcqScore),
+        mcqTotal: Number.isFinite(Number(response.submission?.mcqTotal))
+          ? Number(response.submission.mcqTotal)
+          : mcqTotal,
         submittedAt: new Date().toISOString(),
         codingEvaluation: {
           status: response.submission.codingEvaluation?.status || "queued",
@@ -196,7 +252,24 @@ export function CandidateCodingTaskScreen() {
   useEffect(() => {
     setRunResult(null);
     setRunError("");
-  }, [taskIndex, language]);
+  }, [taskIndex, activeLanguage]);
+
+  useEffect(() => {
+    if (!codingTasks.length) return;
+    setLanguageByTask((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      codingTasks.forEach((task) => {
+        if (next[task.id]) return;
+        next[task.id] =
+          normalizeLanguageValue(task.language || "") ||
+          availableLanguageOptions[0]?.value ||
+          "javascript";
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [codingTasks, availableLanguageOptions]);
 
   useEffect(() => {
     if (!session) return;
@@ -233,7 +306,7 @@ export function CandidateCodingTaskScreen() {
     try {
       const mcqAnswers = session.mcqAnswers || [];
       const sectionAnswers = session.sectionAnswers || [];
-      const codingAnswers = buildCodingAnswers(language);
+      const codingAnswers = buildCodingAnswers();
       const response = await submitCandidateTest({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
@@ -244,8 +317,13 @@ export function CandidateCodingTaskScreen() {
       const mcqTotal = (session.test.mcqQuestions || []).reduce((sum, question) => sum + (question.marks || 1), 0);
       const mcqScore = calculateMcqScore(session.test.mcqQuestions || [], mcqAnswers);
       saveCandidateResultSummary({
-        mcqScore: Math.min(mcqScore, response.submission.totalScore || mcqScore),
-        mcqTotal,
+        submissionId: session.submissionId,
+        mcqScore: Number.isFinite(Number(response.submission?.mcqScore))
+          ? Number(response.submission.mcqScore)
+          : Math.min(mcqScore, response.submission.totalScore || mcqScore),
+        mcqTotal: Number.isFinite(Number(response.submission?.mcqTotal))
+          ? Number(response.submission.mcqTotal)
+          : mcqTotal,
         submittedAt: new Date().toISOString(),
         codingEvaluation: {
           status: response.submission.codingEvaluation?.status || "queued",
@@ -274,7 +352,7 @@ export function CandidateCodingTaskScreen() {
       const response = await runCandidateCode({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
-        language,
+        language: activeLanguage,
         sourceCode: activeCode,
         stdin: runInput,
       });
@@ -283,7 +361,7 @@ export function CandidateCodingTaskScreen() {
       await saveCandidateDraft({
         submissionId: session.submissionId,
         candidateSessionToken: session.candidateSessionToken,
-        codingAnswers: buildCodingAnswers(language),
+        codingAnswers: buildCodingAnswers(),
         sectionAnswers: session.sectionAnswers || [],
       });
     } catch (runError) {
@@ -326,9 +404,14 @@ export function CandidateCodingTaskScreen() {
 
           <div className="flex items-center gap-5">
             <AppDropdown
-              value={language}
-              onChange={setLanguage}
-              options={languageOptions}
+              value={activeLanguage}
+              onChange={(value) =>
+                setLanguageByTask((prev) => ({
+                  ...prev,
+                  [activeTask.id]: value,
+                }))
+              }
+              options={availableLanguageOptions}
               className="h-[60px] w-[179px]"
               triggerClassName="h-full rounded-[8px] border border-[#4c4c4c] bg-[#3c3c3c] px-4 text-[18px] font-medium text-white"
               menuClassName="rounded-[8px] border border-[#4c4c4c] bg-[#2f2f31] shadow-xl"

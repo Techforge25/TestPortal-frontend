@@ -749,6 +749,8 @@ export async function submitCandidateTest(payload: {
     submission: {
       id: string;
       totalScore: number;
+      mcqScore?: number;
+      mcqTotal?: number;
       status: string;
       codingEvaluation?: {
         status: "not_required" | "queued" | "running" | "completed" | "failed";
@@ -786,6 +788,8 @@ export async function getCandidateEvaluationStatus(payload: {
       completedAt?: string | null;
       totalMarks: number;
       maxMarks: number;
+      mcqScore?: number;
+      mcqTotal?: number;
       version: number;
       error?: string;
       tasks: Array<{

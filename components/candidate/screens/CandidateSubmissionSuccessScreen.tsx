@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getCandidateEvaluationStatus } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
 import { getSupportedSections, isCodingEnabled, isMcqEnabled } from "@/components/candidate/lib/assessmentFlow";
+import { calculateMcqScore, calculateMcqTotal } from "@/components/candidate/security/scoring";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import {
   clearCandidateSession,
@@ -72,17 +73,37 @@ export function CandidateSubmissionSuccessScreen() {
   const branding = usePublicBranding();
   const summary = useMemo(() => readCandidateResultSummary(), []);
   const session = useMemo(() => readCandidateSession(), []);
+  const safeSummary = useMemo(() => {
+    if (!session) return summary;
+    if (!summary) return null;
+    if (!summary.submissionId) return null;
+    if (summary.submissionId !== session.submissionId) return null;
+    return summary;
+  }, [session, summary]);
 
-  const mcqScore = summary?.mcqScore ?? 0;
-  const mcqTotal = summary?.mcqTotal ?? session?.test?.mcqQuestions?.length ?? 0;
+  const fallbackMcqTotal = useMemo(
+    () => calculateMcqTotal(session?.test?.mcqQuestions || []),
+    [session]
+  );
+  const fallbackMcqScore = useMemo(
+    () => calculateMcqScore(session?.test?.mcqQuestions || [], session?.mcqAnswers || []),
+    [session]
+  );
+
+  const [mcqSummary, setMcqSummary] = useState<{ score: number; total: number }>({
+    score: safeSummary?.mcqScore ?? fallbackMcqScore,
+    total: safeSummary?.mcqTotal ?? fallbackMcqTotal,
+  });
+  const mcqScore = mcqSummary.score;
+  const mcqTotal = mcqSummary.total;
   const codingEnabled = isCodingEnabled(session);
   const mcqEnabled = isMcqEnabled(session);
   const nonCodingSections = getSupportedSections(session).filter((section) => section !== "mcq" && section !== "coding");
   const hasNonCodingSections = nonCodingSections.length > 0;
   const reviewLabel = hasNonCodingSections ? "Section Review" : "Assessment";
   const sectionsLabel = nonCodingSections.map((key) => sectionLabels[key] || key).join(", ");
-  const submittedLabel = summary?.submittedAt
-    ? new Date(summary.submittedAt).toLocaleString("en-US", {
+  const submittedLabel = safeSummary?.submittedAt
+    ? new Date(safeSummary.submittedAt).toLocaleString("en-US", {
         weekday: "long",
         month: "short",
         day: "numeric",
@@ -96,11 +117,11 @@ export function CandidateSubmissionSuccessScreen() {
     totalMarks: number;
     maxMarks: number;
   } | null>(
-    summary?.codingEvaluation
+    safeSummary?.codingEvaluation
       ? {
-          status: summary.codingEvaluation.status,
-          totalMarks: Number(summary.codingEvaluation.totalMarks || 0),
-          maxMarks: Number(summary.codingEvaluation.maxMarks || 0),
+          status: safeSummary.codingEvaluation.status,
+          totalMarks: Number(safeSummary.codingEvaluation.totalMarks || 0),
+          maxMarks: Number(safeSummary.codingEvaluation.maxMarks || 0),
         }
       : null
   );
@@ -108,7 +129,14 @@ export function CandidateSubmissionSuccessScreen() {
   const [pollStartedAt] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!codingEnabled || !session?.submissionId || !session?.candidateSessionToken) return;
+    setMcqSummary({
+      score: safeSummary?.mcqScore ?? fallbackMcqScore,
+      total: safeSummary?.mcqTotal ?? fallbackMcqTotal,
+    });
+  }, [safeSummary?.mcqScore, safeSummary?.mcqTotal, fallbackMcqScore, fallbackMcqTotal]);
+
+  useEffect(() => {
+    if (!session?.submissionId || !session?.candidateSessionToken) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -121,18 +149,34 @@ export function CandidateSubmissionSuccessScreen() {
         if (cancelled) return;
         setEvalFetchError(false);
         const next = result?.evaluation;
+        const backendMcqScore = Number(next?.mcqScore);
+        const backendMcqTotal = Number(next?.mcqTotal);
+        if (
+          Number.isFinite(backendMcqScore) &&
+          backendMcqScore >= 0 &&
+          Number.isFinite(backendMcqTotal) &&
+          backendMcqTotal >= 0
+        ) {
+          setMcqSummary({
+            score: backendMcqScore,
+            total: backendMcqTotal,
+          });
+        }
         setCodingEval({
           status: next?.status || "queued",
           totalMarks: Number(next?.totalMarks || 0),
           maxMarks: Number(next?.maxMarks || 0),
         });
 
-        if (!["completed", "failed", "not_required"].includes(String(next?.status || ""))) {
+        if (
+          codingEnabled &&
+          !["completed", "failed", "not_required"].includes(String(next?.status || ""))
+        ) {
           timer = setTimeout(poll, 1200);
         }
       } catch {
         if (!cancelled) setEvalFetchError(true);
-        if (!cancelled) timer = setTimeout(poll, 1800);
+        if (!cancelled && codingEnabled) timer = setTimeout(poll, 1800);
       }
     };
 

@@ -10,15 +10,24 @@ export function calculateMcqTotal(
 }
 
 export function calculateMcqScore(
-  questions: Array<{ index: number; marks?: number }>,
+  questions: Array<{ index?: number; correctOptionIndex?: number; marks?: number }>,
   answers: McqAnswer[]
 ): number {
   const byIndex = new Map<number, number>();
-  answers.forEach((answer) => byIndex.set(answer.questionIndex, answer.selectedOptionIndex));
-  return questions.reduce((sum, question) => {
-    const hasAnswered = byIndex.has(question.index);
-    if (!hasAnswered) return sum;
+  answers.forEach((answer) => {
+    if (!Number.isFinite(Number(answer.questionIndex))) return;
+    byIndex.set(Number(answer.questionIndex), Number(answer.selectedOptionIndex));
+  });
+  return questions.reduce((sum, question, fallbackIndex) => {
+    const questionIndex =
+      Number.isFinite(Number(question.index)) && Number(question.index) >= 0
+        ? Number(question.index)
+        : fallbackIndex;
+    const selectedOptionIndex = byIndex.get(questionIndex);
+    if (selectedOptionIndex === undefined) return sum;
+    const correctOptionIndex = Number(question.correctOptionIndex);
+    if (!Number.isFinite(correctOptionIndex)) return sum;
+    if (selectedOptionIndex !== correctOptionIndex) return sum;
     return sum + (question.marks || 1);
   }, 0);
 }
-
