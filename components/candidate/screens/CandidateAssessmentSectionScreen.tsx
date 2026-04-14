@@ -233,20 +233,27 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
 
   useEffect(() => {
     const existing = session?.sectionAnswers || [];
-    setAnswers(
-      existing.reduce<Record<number, string>>((acc, item) => {
-        acc[item.itemIndex] = item.answer;
-        return acc;
-      }, {})
-    );
-    setUiPreviewAnswers(
-      existing.reduce<Record<number, UiPreviewAnswer>>((acc, item) => {
-        if (item.sectionKey !== "ui_preview") return acc;
-        acc[item.itemIndex] = parseUiPreviewAnswer(item.answer || "");
-        return acc;
-      }, {})
-    );
-  }, [session?.submissionId, session?.sectionAnswers]);
+    const nextAnswers = existing.reduce<Record<number, string>>((acc, item) => {
+      acc[item.itemIndex] = item.answer;
+      return acc;
+    }, {});
+    const nextUiAnswers = existing.reduce<Record<number, UiPreviewAnswer>>((acc, item) => {
+      if (item.sectionKey !== "ui_preview") return acc;
+      acc[item.itemIndex] = parseUiPreviewAnswer(item.answer || "");
+      return acc;
+    }, {});
+
+    setAnswers((prev) => {
+      const prevSerialized = JSON.stringify(prev);
+      const nextSerialized = JSON.stringify(nextAnswers);
+      return prevSerialized === nextSerialized ? prev : nextAnswers;
+    });
+    setUiPreviewAnswers((prev) => {
+      const prevSerialized = JSON.stringify(prev);
+      const nextSerialized = JSON.stringify(nextUiAnswers);
+      return prevSerialized === nextSerialized ? prev : nextUiAnswers;
+    });
+  }, [session?.submissionId]);
 
   useEffect(() => {
     if (!session?.submissionId || !session?.candidateSessionToken) return;
@@ -262,7 +269,13 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       ...session,
       sectionAnswers,
     });
-  }, [allConfigs, answers, session]);
+  }, [
+    allConfigs,
+    answers,
+    session?.submissionId,
+    session?.candidateSessionToken,
+    session,
+  ]);
 
   useEffect(() => {
     if (!configs.length) return;
@@ -291,6 +304,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       return changed ? next : prev;
     });
   }, [configs]);
+
   const [currentPage, setCurrentPage] = useState(0);
   const [error, setError] = useState("");
   const assessmentPages = useMemo(() => {
