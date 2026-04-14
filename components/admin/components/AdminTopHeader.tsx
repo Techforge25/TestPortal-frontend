@@ -11,6 +11,7 @@ import {
 } from "@/components/admin/lib/backendApi";
 import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
 import { useAdminProfile } from "@/components/admin/lib/runtimeSettings";
+import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 
 const defaultAdminAvatar =
   "https://www.figma.com/api/mcp/asset/9b51af98-e896-44c0-8cf0-ba118fcdba39";
@@ -100,6 +101,7 @@ function DoubleCheckIcon() {
 export function AdminTopHeader({ isDark, onToggleTheme, currentPage = "Dashboard" }: AdminTopHeaderProps) {
   const router = useRouter();
   const profile = useAdminProfile();
+  const token = getAdminToken();
   const [notifications, setNotifications] = useState<AdminNotificationItem[]>([]);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement | null>(null);
@@ -155,6 +157,17 @@ export function AdminTopHeader({ isDark, onToggleTheme, currentPage = "Dashboard
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  useRealtimeSubscription({
+    token,
+    events: ["admin:notifications.updated", "admin:data.changed"],
+    onEvent: async () => {
+      if (!token) return;
+      const response = await listAdminNotifications(token, { page: 1, pageSize: 50 });
+      setNotifications(response.notifications || []);
+    },
+    enabled: Boolean(token),
+  });
 
   return (
     <header

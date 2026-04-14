@@ -10,8 +10,8 @@ import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
 import { listAdminCandidates, type AdminCandidateRow } from "@/components/admin/lib/backendApi";
 import { AppPagination } from "@/components/shared/ui/AppPagination";
 import { AppSearchBar } from "@/components/shared/ui/AppSearchBar";
+import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 
-const CANDIDATES_POLL_MS = 30000;
 const CANDIDATES_CACHE_KEY = "admin_candidates_cache_v1";
 
 function readCachedCandidateRows(): AdminCandidateRow[] {
@@ -107,43 +107,26 @@ export function AdminCandidatesScreen({ initialThemeDark = false }: AdminCandida
     void loadRows();
   }, [loadRows, token]);
 
+  useRealtimeSubscription({
+    token,
+    events: ["admin:candidates.updated", "admin:data.changed"],
+    onEvent: async () => {
+      if (document.visibilityState === "visible") {
+        await loadRows();
+      }
+    },
+    enabled: Boolean(token),
+  });
+
   useEffect(() => {
     if (!token) return;
-    let timer: ReturnType<typeof setInterval> | null = null;
-
-    const startPolling = () => {
-      if (timer) return;
-      timer = setInterval(() => {
-        if (document.visibilityState === "visible") {
-          void loadRows();
-        }
-      }, CANDIDATES_POLL_MS);
-    };
-
-    const stopPolling = () => {
-      if (!timer) return;
-      clearInterval(timer);
-      timer = null;
-    };
-
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void loadRows();
-        startPolling();
-      } else {
-        stopPolling();
       }
     };
-
     document.addEventListener("visibilitychange", onVisibilityChange);
-    if (document.visibilityState === "visible") {
-      startPolling();
-    }
-
-    return () => {
-      stopPolling();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [loadRows, token]);
 
   return (

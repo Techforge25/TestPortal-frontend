@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { candidateLoginWithPasscode, getCandidateProfilePrefill } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
-import { clearCandidateAuthDraft, readCandidateAuthDraft } from "@/components/candidate/lib/candidateAuthDraft";
+import { readCandidateAuthDraft } from "@/components/candidate/lib/candidateAuthDraft";
 import { AuthTextField } from "@/components/shared/auth/AuthTextField";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { AppDropdown, type DropdownOption } from "@/components/shared/ui/AppDropdown";
@@ -34,6 +34,8 @@ type FormState = {
   expectedJoiningDate: string;
   shiftComfortable: string;
 };
+
+const CANDIDATE_REG_DRAFT_KEY = "candidate_registration_form_draft_v1";
 
 const initialState: FormState = {
   fullName: "",
@@ -445,12 +447,53 @@ export function CandidateRegistrationScreen() {
   const loginDraft = useMemo(() => readCandidateAuthDraft(), []);
   const didPrefillRef = useRef(false);
   const [form, setForm] = useState<FormState>(() => ({
-    ...initialState,
+    ...(typeof window !== "undefined"
+      ? (() => {
+          try {
+            const raw = window.localStorage.getItem(CANDIDATE_REG_DRAFT_KEY);
+            if (!raw) return initialState;
+            const parsed = JSON.parse(raw) as FormState;
+            return { ...initialState, ...parsed };
+          } catch {
+            return initialState;
+          }
+        })()
+      : initialState),
     email: loginDraft?.email || "",
   }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const branding = usePublicBranding();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(CANDIDATE_REG_DRAFT_KEY, JSON.stringify(form));
+  }, [form]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncDraft = () => {
+      try {
+        const raw = window.localStorage.getItem(CANDIDATE_REG_DRAFT_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as FormState;
+        setForm((prev) => ({ ...prev, ...parsed, email: loginDraft?.email || parsed.email || prev.email }));
+      } catch {
+        // ignore draft parse failures
+      }
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== CANDIDATE_REG_DRAFT_KEY) return;
+      syncDraft();
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [loginDraft?.email]);
 
   useEffect(() => {
     if (didPrefillRef.current) return;
@@ -591,6 +634,8 @@ function setValue(key: keyof FormState, value: string) {
           workExperience: form.workExperience,
           startDate: normalizeDateForApi(form.startDate),
           endDate: normalizeDateForApi(form.endDate),
+          currentSalary: "N/A",
+          expectedSalary: "N/A",
           expectedJoiningDate: normalizeDateForApi(form.expectedJoiningDate),
           shiftComfortable: form.shiftComfortable,
         },
@@ -599,13 +644,16 @@ function setValue(key: keyof FormState, value: string) {
       saveCandidateSession({
         submissionId: response.submission.id,
         candidateSessionToken: response.candidateSessionToken,
+        mcqSectionSubmitted: false,
         test: response.test,
         candidate: {
           name: response.submission.candidateName,
           email: response.submission.candidateEmail,
         },
       });
-      clearCandidateAuthDraft();
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(CANDIDATE_REG_DRAFT_KEY);
+      }
       router.push("/candidate/pre-test");
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Login failed";

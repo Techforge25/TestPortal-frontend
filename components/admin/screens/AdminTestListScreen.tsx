@@ -13,6 +13,7 @@ import { AppSearchBar } from "@/components/shared/ui/AppSearchBar";
 import { deleteAdminTest, getAdminTestForEdit, listAdminTests } from "@/components/admin/lib/backendApi";
 import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
 import { setEditingTestDraft, type AdminTestListItem } from "@/components/admin/lib/testListStorage";
+import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 
 function CreateIcon() {
   return (
@@ -48,7 +49,6 @@ function TrashIcon() {
   );
 }
 
-const TEST_LIST_POLL_MS = 30000;
 const TEST_LIST_CACHE_KEY = "admin_test_list_cache_v1";
 
 function readCachedTestRows(): AdminTestListItem[] {
@@ -147,6 +147,7 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
   const [rows, setRows] = useState<AdminTestListItem[]>([]);
   const [viewRow, setViewRow] = useState<AdminTestListItem | null>(null);
   const [deleteRow, setDeleteRow] = useState<AdminTestListItem | null>(null);
+  const [isDeletingTest, setIsDeletingTest] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasCachedOnMountRef = useRef(false);
   const initialFetchHandledRef = useRef(false);
@@ -197,42 +198,29 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
     } else {
       void loadRows(false);
     }
-    let timer: ReturnType<typeof setInterval> | null = null;
+  }, [loadRows]);
 
-    const startPolling = () => {
-      if (timer) return;
-      timer = setInterval(() => {
-        if (document.visibilityState === "visible") {
-          void loadRows(false);
-        }
-      }, TEST_LIST_POLL_MS);
-    };
+  useRealtimeSubscription({
+    token,
+    events: ["admin:tests.updated", "admin:data.changed"],
+    onEvent: async () => {
+      if (document.visibilityState === "visible") {
+        await loadRows(false);
+      }
+    },
+    enabled: Boolean(token),
+  });
 
-    const stopPolling = () => {
-      if (!timer) return;
-      clearInterval(timer);
-      timer = null;
-    };
-
+  useEffect(() => {
+    if (!token) return;
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void loadRows(false);
-        startPolling();
-      } else {
-        stopPolling();
       }
     };
-
     document.addEventListener("visibilitychange", onVisibilityChange);
-    if (document.visibilityState === "visible") {
-      startPolling();
-    }
-
-    return () => {
-      stopPolling();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [loadRows]);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [loadRows, token]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -253,17 +241,23 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
 
   async function confirmDeleteRow() {
     if (!deleteRow) return;
-    if (token) {
-      try {
-        await deleteAdminTest(token, deleteRow.id);
-      } catch (deleteError) {
-        const message = deleteError instanceof Error ? deleteError.message : "Failed to delete test";
-        setError(message);
-        return;
-      }
+    if (!token) {
+      setError("Admin session missing. Please login again.");
+      return;
     }
-    setRows((prev) => prev.filter((row) => row.id !== deleteRow.id));
-    setDeleteRow(null);
+
+    setIsDeletingTest(true);
+    setError("");
+    try {
+      await deleteAdminTest(token, deleteRow.id);
+      setDeleteRow(null);
+      await loadRows(false);
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete test";
+      setError(message);
+    } finally {
+      setIsDeletingTest(false);
+    }
   }
 
   return (
@@ -471,7 +465,9 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
                 </p>
                 <div className="mt-6 flex justify-end gap-3">
                   <AppButton variant="ghost" onClick={() => setDeleteRow(null)}>Cancel</AppButton>
-                  <AppButton variant="danger" onClick={confirmDeleteRow}>Delete</AppButton>
+                  <AppButton variant="danger" onClick={confirmDeleteRow} disabled={isDeletingTest}>
+                    {isDeletingTest ? "Deleting..." : "Delete"}
+                  </AppButton>
                 </div>
               </div>
             </div>
@@ -483,4 +479,3 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
     </main>
   );
 }
-

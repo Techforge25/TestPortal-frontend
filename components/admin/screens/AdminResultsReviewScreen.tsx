@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AdminFooter } from "@/components/admin/components/AdminFooter";
@@ -12,11 +12,11 @@ import { listAdminReviews, type AdminReviewRow } from "@/components/admin/lib/ba
 import { AppPagination } from "@/components/shared/ui/AppPagination";
 import { AppSegmentedControl } from "@/components/shared/ui/AppSegmentedControl";
 import { AppSearchBar } from "@/components/shared/ui/AppSearchBar";
+import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 
 type ReviewTab = "pending" | "all" | "completed";
 type ReviewSummary = { pending: number; reviewedToday: number; passed: number; failed: number };
 
-const REVIEWS_POLL_MS = 30000;
 const REVIEWS_CACHE_KEY = "admin_reviews_cache_v1";
 
 function readCachedReviews(): { rows: AdminReviewRow[]; summary: ReviewSummary } {
@@ -161,8 +161,6 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
   const [summary, setSummary] = useState({ pending: 0, reviewedToday: 0, passed: 0, failed: 0 });
   const [error, setError] = useState("");
   const [authError, setAuthError] = useState("");
-  const hasCachedOnMountRef = useRef(false);
-  const initialFetchHandledRef = useRef(false);
   const pageSize = 8;
 
   const filteredRows = useMemo(() => rows, [rows]);
@@ -179,7 +177,6 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
     if (cached.rows.length > 0) {
       setRows(cached.rows);
       setSummary(cached.summary);
-      hasCachedOnMountRef.current = true;
     }
 
     const currentToken = getAdminToken();
@@ -209,50 +206,31 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
 
   useEffect(() => {
     if (!token) return;
-    if (!initialFetchHandledRef.current) {
-      initialFetchHandledRef.current = true;
-      if (hasCachedOnMountRef.current) return;
-    }
+    // Always fetch latest rows even when cached data exists,
+    // so stale/deleted submissions are not shown.
     void loadRows();
   }, [loadRows, token]);
 
+  useRealtimeSubscription({
+    token,
+    events: ["admin:reviews.updated", "admin:data.changed"],
+    onEvent: async () => {
+      if (document.visibilityState === "visible") {
+        await loadRows();
+      }
+    },
+    enabled: Boolean(token),
+  });
+
   useEffect(() => {
     if (!token) return;
-    let timer: ReturnType<typeof setInterval> | null = null;
-
-    const startPolling = () => {
-      if (timer) return;
-      timer = setInterval(() => {
-        if (document.visibilityState === "visible") {
-          void loadRows();
-        }
-      }, REVIEWS_POLL_MS);
-    };
-
-    const stopPolling = () => {
-      if (!timer) return;
-      clearInterval(timer);
-      timer = null;
-    };
-
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void loadRows();
-        startPolling();
-      } else {
-        stopPolling();
       }
     };
-
     document.addEventListener("visibilitychange", onVisibilityChange);
-    if (document.visibilityState === "visible") {
-      startPolling();
-    }
-
-    return () => {
-      stopPolling();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [loadRows, token]);
 
   return (

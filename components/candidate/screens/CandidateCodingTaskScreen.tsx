@@ -6,9 +6,10 @@ import { AppButton } from "@/components/shared/ui/AppButton";
 import { AppDropdown, DropdownOption } from "@/components/shared/ui/AppDropdown";
 import { runCandidateCode, saveCandidateDraft, submitCandidateTest } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
+import { useCandidateRealtimeState } from "@/components/candidate/hooks/useCandidateRealtimeState";
 import {
-  readCandidateSession,
   saveCandidateResultSummary,
+  saveCandidateSession,
 } from "@/components/candidate/lib/candidateSessionStorage";
 import { CandidateCountdown } from "@/components/candidate/components/CandidateCountdown";
 import { useCandidateSecurityGuard } from "@/components/candidate/security/useCandidateSecurityGuard";
@@ -143,7 +144,7 @@ function PlayIcon() {
 export function CandidateCodingTaskScreen() {
   const router = useRouter();
   const branding = usePublicBranding();
-  const session = useMemo(() => readCandidateSession(), []);
+  const { session } = useCandidateRealtimeState();
   const [taskIndex, setTaskIndex] = useState(0);
   const [error, setError] = useState("");
   const [runError, setRunError] = useState("");
@@ -170,10 +171,28 @@ export function CandidateCodingTaskScreen() {
     [session]
   );
   const availableLanguageOptions: DropdownOption[] = allLanguageOptions;
-  const [languageByTask, setLanguageByTask] = useState<Record<string, string>>({});
-  const [codeByTask, setCodeByTask] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fallbackCodingTasks.map((task) => [task.id, task.starterCode])),
-  );
+  const [languageByTask, setLanguageByTask] = useState<Record<string, string>>(() => {
+    const fromSession = session?.codingAnswers || [];
+    const mapped: Record<string, string> = {};
+    fromSession.forEach((item) => {
+      const task = (session?.test?.codingTasks || []).find((t) => t.index === item.taskIndex);
+      if (!task) return;
+      mapped[`task-${task.index + 1}`] = normalizeLanguageValue(item.language || "") || "javascript";
+    });
+    return mapped;
+  });
+  const [codeByTask, setCodeByTask] = useState<Record<string, string>>(() => {
+    const fromSession = session?.codingAnswers || [];
+    const mapped: Record<string, string> = Object.fromEntries(
+      fallbackCodingTasks.map((task) => [task.id, task.starterCode]),
+    );
+    fromSession.forEach((item) => {
+      const task = (session?.test?.codingTasks || []).find((t) => t.index === item.taskIndex);
+      if (!task) return;
+      mapped[`task-${task.index + 1}`] = item.code || mapped[`task-${task.index + 1}`] || "";
+    });
+    return mapped;
+  });
 
   const activeTask = codingTasks[taskIndex];
   const activeLanguage =
@@ -196,6 +215,18 @@ export function CandidateCodingTaskScreen() {
       })),
     [codingTasks, codeByTask, languageByTask, availableLanguageOptions]
   );
+
+  useEffect(() => {
+    if (!session?.submissionId || !session?.candidateSessionToken) return;
+    const codingAnswers = buildCodingAnswers();
+    const currentSerialized = JSON.stringify(session.codingAnswers || []);
+    const nextSerialized = JSON.stringify(codingAnswers);
+    if (currentSerialized === nextSerialized) return;
+    saveCandidateSession({
+      ...session,
+      codingAnswers,
+    });
+  }, [buildCodingAnswers, session]);
 
   const { deadlineAt, warningCount, warningPopup, dismissWarningPopup } = useCandidateSecurityGuard({
     submissionId: session?.submissionId || "",

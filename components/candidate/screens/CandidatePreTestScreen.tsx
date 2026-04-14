@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
-import { readCandidateSession } from "@/components/candidate/lib/candidateSessionStorage";
+import { useCandidateRealtimeState } from "@/components/candidate/hooks/useCandidateRealtimeState";
 import { getCandidateStartRoute, isCodingEnabled, isMcqEnabled } from "@/components/candidate/lib/assessmentFlow";
+import { clearCandidateAuthDraft } from "@/components/candidate/lib/candidateAuthDraft";
 
 function TimeIcon() {
   return (
@@ -87,7 +88,7 @@ export function CandidatePreTestScreen() {
   const router = useRouter();
   const [accepted, setAccepted] = useState(false);
   const branding = usePublicBranding();
-  const session = useMemo(() => readCandidateSession(), []);
+  const { session } = useCandidateRealtimeState();
   const test = session?.test;
   const mcqEnabled = isMcqEnabled(session);
   const codingEnabled = isCodingEnabled(session);
@@ -129,6 +130,12 @@ export function CandidatePreTestScreen() {
     "Partial marks may be awarded for coding tasks.",
     `Your progress is auto-saved every ${autoSaveInterval} seconds.`,
   ];
+
+  useEffect(() => {
+    if (!session?.submissionId) return;
+    // Clear auth draft after session route is mounted to avoid auth-guard flicker on start click.
+    clearCandidateAuthDraft();
+  }, [session?.submissionId]);
 
   if (!session || !test) {
     return (

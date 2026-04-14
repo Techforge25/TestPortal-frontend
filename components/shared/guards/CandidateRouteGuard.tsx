@@ -1,10 +1,10 @@
 "use client";
 
-import { ReactNode, useEffect, useMemo, useSyncExternalStore } from "react";
+import { ReactNode, useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { readCandidateAuthDraft } from "@/components/candidate/lib/candidateAuthDraft";
-import { readCandidateResultSummary, readCandidateSession } from "@/components/candidate/lib/candidateSessionStorage";
+import { useCandidateRealtimeState } from "@/components/candidate/hooks/useCandidateRealtimeState";
 import {
   getSupportedSections,
   hasAssessmentSections,
@@ -21,15 +21,12 @@ type CandidateRouteGuardProps = {
 export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const isHydrated = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
+  const { session, summary } = useCandidateRealtimeState();
+  const isHydrated = true;
 
   const draft = mode === "auth_draft" ? readCandidateAuthDraft() : null;
-  const session = mode === "session" ? readCandidateSession() : null;
-  const summary = mode === "session" ? readCandidateResultSummary() : null;
+  const effectiveSession = mode === "session" ? session : null;
+  const effectiveSummary = mode === "session" ? summary : null;
 
   const isAllowed =
     mode === "auth_draft"
@@ -37,14 +34,14 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
       : Boolean(session?.submissionId && session?.candidateSessionToken);
 
   const expectedRoute = useMemo(() => {
-    if (mode !== "session" || !session) return null;
+    if (mode !== "session" || !effectiveSession) return null;
 
     const hasTextAnswer = (value: string | undefined | null) => String(value || "").trim().length > 0;
-    const sectionAnswers = Array.isArray(session.sectionAnswers) ? session.sectionAnswers : [];
+    const sectionAnswers = Array.isArray(effectiveSession.sectionAnswers) ? effectiveSession.sectionAnswers : [];
 
     const isSectionCompleted = (sectionKey: string) => {
-      const sectionConfigs = Array.isArray(session.test?.sectionConfigs)
-        ? session.test.sectionConfigs.filter((item) => item.key === sectionKey)
+      const sectionConfigs = Array.isArray(effectiveSession.test?.sectionConfigs)
+        ? effectiveSession.test.sectionConfigs.filter((item) => item.key === sectionKey)
         : [];
 
       if (sectionConfigs.length === 0) {
@@ -53,23 +50,18 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
 
       const requiredConfigs = sectionConfigs.filter((item) => item.required !== false);
       const targetConfigs = requiredConfigs.length > 0 ? requiredConfigs : sectionConfigs;
-
-      return targetConfigs.every((config) =>
-        sectionAnswers.some(
-          (item) =>
-            item.sectionKey === sectionKey &&
-            item.itemIndex === config.index &&
-            hasTextAnswer(item.answer)
-        )
-      );
+      const completedCount = sectionAnswers.filter(
+        (item) => item.sectionKey === sectionKey && hasTextAnswer(item.answer)
+      ).length;
+      return completedCount >= targetConfigs.length;
     };
 
-    const sections = getSupportedSections(session);
-    const mcqAnswers = Array.isArray(session.mcqAnswers) ? session.mcqAnswers : [];
+    const sections = getSupportedSections(effectiveSession);
+    const mcqAnswers = Array.isArray(effectiveSession.mcqAnswers) ? effectiveSession.mcqAnswers : [];
     const isSubmittedForCurrentSession =
-      Boolean(summary?.submissionId) && summary?.submissionId === session.submissionId;
+      Boolean(effectiveSummary?.submissionId) && effectiveSummary?.submissionId === effectiveSession.submissionId;
 
-    const mcqTotal = Array.isArray(session.test?.mcqQuestions) ? session.test.mcqQuestions.length : 0;
+    const mcqTotal = Array.isArray(effectiveSession.test?.mcqQuestions) ? effectiveSession.test.mcqQuestions.length : 0;
     const answerMap = new Map<number, number>();
     mcqAnswers.forEach((item) => {
       if (
@@ -80,30 +72,85 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
         answerMap.set(item.questionIndex, item.selectedOptionIndex);
       }
     });
-    const questionIndexes = (session.test?.mcqQuestions || []).map((question, index) =>
-      Number.isInteger(question?.index) ? question.index : index
-    );
-    const mcqDone =
-      !isMcqEnabled(session) ||
-      mcqTotal === 0 ||
-      questionIndexes.every((questionIndex) => answerMap.has(questionIndex));
+    const mcqSubmitted = Boolean(effectiveSession.mcqSectionSubmitted);
+    const mcqDone = !isMcqEnabled(effectiveSession) || mcqSubmitted || (mcqTotal > 0 && answerMap.size >= mcqTotal);
 
-    const uiPreviewDone = !hasUiPreviewSections(session) || isSectionCompleted("ui_preview");
+    const uiPreviewDone = !hasUiPreviewSections(effectiveSession) || isSectionCompleted("ui_preview");
 
     const assessmentKeys = sections.filter(
       (section) => section !== "mcq" && section !== "coding" && section !== "ui_preview"
     );
     const assessmentDone =
-      !hasAssessmentSections(session) ||
+      !hasAssessmentSections(effectiveSession) ||
       assessmentKeys.every((key) => isSectionCompleted(key));
 
     if (isSubmittedForCurrentSession) return "/candidate/submitted";
     if (!mcqDone) return "/candidate/test";
     if (!uiPreviewDone) return "/candidate/ui-preview";
     if (!assessmentDone) return "/candidate/assessment";
-    if (isCodingEnabled(session)) return "/candidate/tasks";
+    if (isCodingEnabled(effectiveSession)) return "/candidate/tasks";
     return "/candidate/submitted";
-  }, [mode, session, summary]);
+  }, [mode, effectiveSession, effectiveSummary]);
+
+  const canAccessCurrentPath = useMemo(() => {
+    if (mode !== "session" || !effectiveSession) return false;
+    if (!pathname) return false;
+    if (pathname === "/candidate/pre-test") return true;
+
+    const sectionAnswers = Array.isArray(effectiveSession.sectionAnswers) ? effectiveSession.sectionAnswers : [];
+    const mcqAnswers = Array.isArray(effectiveSession.mcqAnswers) ? effectiveSession.mcqAnswers : [];
+    const sections = getSupportedSections(effectiveSession);
+
+    const isSubmittedForCurrentSession =
+      Boolean(effectiveSummary?.submissionId) && effectiveSummary?.submissionId === effectiveSession.submissionId;
+
+    const mcqTotal = Array.isArray(effectiveSession.test?.mcqQuestions) ? effectiveSession.test.mcqQuestions.length : 0;
+    const answerMap = new Map<number, number>();
+    mcqAnswers.forEach((item) => {
+      if (
+        Number.isInteger(item?.questionIndex) &&
+        Number.isInteger(item?.selectedOptionIndex) &&
+        item.selectedOptionIndex >= 0
+      ) {
+        answerMap.set(item.questionIndex, item.selectedOptionIndex);
+      }
+    });
+    const mcqSubmitted = Boolean(effectiveSession.mcqSectionSubmitted);
+    const mcqDone = !isMcqEnabled(effectiveSession) || mcqSubmitted || (mcqTotal > 0 && answerMap.size >= mcqTotal);
+
+    const uiDone =
+      !hasUiPreviewSections(effectiveSession) ||
+      sectionAnswers.some((item) => item.sectionKey === "ui_preview" && String(item.answer || "").trim().length > 0);
+
+    const assessmentKeys = sections.filter(
+      (section) => section !== "mcq" && section !== "coding" && section !== "ui_preview"
+    );
+    const assessmentDone =
+      !hasAssessmentSections(effectiveSession) ||
+      assessmentKeys.every((key) =>
+        sectionAnswers.some((item) => item.sectionKey === key && String(item.answer || "").trim().length > 0)
+      );
+
+    if (pathname === "/candidate/test") return !isSubmittedForCurrentSession && isMcqEnabled(effectiveSession);
+    if (pathname === "/candidate/ui-preview") return !isSubmittedForCurrentSession && hasUiPreviewSections(effectiveSession) && mcqDone;
+    if (pathname === "/candidate/assessment")
+      return (
+        !isSubmittedForCurrentSession &&
+        hasAssessmentSections(effectiveSession) &&
+        mcqDone &&
+        (!hasUiPreviewSections(effectiveSession) || uiDone)
+      );
+    if (pathname === "/candidate/tasks")
+      return (
+        !isSubmittedForCurrentSession &&
+        isCodingEnabled(effectiveSession) &&
+        mcqDone &&
+        (!hasUiPreviewSections(effectiveSession) || uiDone) &&
+        (!hasAssessmentSections(effectiveSession) || assessmentDone)
+      );
+    if (pathname === "/candidate/submitted") return isSubmittedForCurrentSession;
+    return false;
+  }, [mode, effectiveSession, pathname, effectiveSummary]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -112,10 +159,13 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
       router.replace("/");
       return;
     }
+    if (pathname === "/candidate/pre-test") return;
     if (!expectedRoute) return;
+    if (canAccessCurrentPath) return;
     if (pathname === expectedRoute) return;
 
     const allowedPaths = new Set([
+      "/candidate/pre-test",
       "/candidate/test",
       "/candidate/ui-preview",
       "/candidate/assessment",
@@ -124,11 +174,11 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
     ]);
     if (!allowedPaths.has(pathname || "")) return;
     router.replace(expectedRoute);
-  }, [isHydrated, mode, isAllowed, expectedRoute, pathname, router]);
+  }, [isHydrated, mode, isAllowed, expectedRoute, pathname, router, canAccessCurrentPath]);
 
   if (!isHydrated) return null;
 
-  if (mode === "session" && isAllowed && expectedRoute && pathname !== expectedRoute) {
+  if (mode === "session" && isAllowed && expectedRoute && !canAccessCurrentPath) {
     return null;
   }
 

@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { logCandidateViolation } from "@/components/admin/lib/backendApi";
-import { readRuntimeState, saveRuntimeState } from "@/components/candidate/security/runtimeStore";
+import {
+  CANDIDATE_RUNTIME_EVENT,
+  readRuntimeState,
+  saveRuntimeState,
+} from "@/components/candidate/security/runtimeStore";
 
 type SecurityConfig = {
   forceFullscreen?: boolean;
@@ -86,7 +90,7 @@ export function useCandidateSecurityGuard({
     pathname === "/candidate/tasks";
   const warningLimit = useMemo(() => security.warningLimit || 2, [security.warningLimit]);
   const initialRuntime = submissionId ? readRuntimeState(submissionId) : null;
-  const [deadlineAt] = useState(() => {
+  const [deadlineAt, setDeadlineAt] = useState(() => {
     if (initialRuntime?.deadlineAt) return initialRuntime.deadlineAt;
     return Date.now() + durationMinutes * 60 * 1000;
   });
@@ -112,6 +116,40 @@ export function useCandidateSecurityGuard({
   useEffect(() => {
     warningCountRef.current = warningCount;
   }, [warningCount]);
+
+  useEffect(() => {
+    if (!submissionId) return;
+
+    const syncFromRuntime = () => {
+      const runtime = readRuntimeState(submissionId);
+      if (!runtime) return;
+      if (Number.isFinite(runtime.deadlineAt) && runtime.deadlineAt > 0) {
+        setDeadlineAt(runtime.deadlineAt);
+      }
+      if (Number.isFinite(runtime.warningCount)) {
+        warningCountRef.current = runtime.warningCount;
+        setWarningCount(runtime.warningCount);
+      }
+    };
+
+    const onRuntimeEvent = (event: Event) => {
+      const custom = event as CustomEvent<{ submissionId?: string }>;
+      if (custom.detail?.submissionId && custom.detail.submissionId !== submissionId) return;
+      syncFromRuntime();
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || !event.key.includes(`candidate_runtime_${submissionId}`)) return;
+      syncFromRuntime();
+    };
+
+    window.addEventListener(CANDIDATE_RUNTIME_EVENT, onRuntimeEvent);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(CANDIDATE_RUNTIME_EVENT, onRuntimeEvent);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [submissionId]);
 
   const triggerAutoSubmit = useCallback(async (reason: string) => {
     if (hasAutoSubmittedRef.current) return;
@@ -203,10 +241,17 @@ export function useCandidateSecurityGuard({
     const existing = readRuntimeState(submissionId);
     if (!existing?.deadlineAt) {
       const nextDeadlineAt = Date.now() + durationMinutes * 60 * 1000;
+      setDeadlineAt(nextDeadlineAt);
       saveRuntimeState(submissionId, {
         deadlineAt: nextDeadlineAt,
         warningCount: 0,
       });
+      return;
+    }
+    setDeadlineAt(existing.deadlineAt);
+    if (Number.isFinite(existing.warningCount)) {
+      warningCountRef.current = existing.warningCount;
+      setWarningCount(existing.warningCount);
     }
   }, [durationMinutes, isExamRoute, submissionId]);
 

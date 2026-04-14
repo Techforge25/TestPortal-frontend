@@ -11,6 +11,7 @@ import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
 import { getAdminDashboardData, type AdminDashboardResponse } from "@/components/admin/lib/backendApi";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { AppDropdown } from "@/components/shared/ui/AppDropdown";
+import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 
 function FullSpectrumIcon() {
   return (
@@ -104,7 +105,6 @@ const periodOptions: { value: PerformancePeriod; label: string }[] = [
   { value: "yearly", label: "Yearly" },
 ];
 
-const DASHBOARD_POLL_MS = 30000;
 const DASHBOARD_CACHE_KEY = "admin_dashboard_cache_v1";
 
 function readCachedDashboard(): AdminDashboardResponse | null {
@@ -212,43 +212,26 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
     void loadDashboard();
   }, [loadDashboard, token]);
 
+  useRealtimeSubscription({
+    token,
+    events: ["admin:dashboard.updated", "admin:data.changed"],
+    onEvent: async () => {
+      if (document.visibilityState === "visible") {
+        await loadDashboard();
+      }
+    },
+    enabled: Boolean(token),
+  });
+
   useEffect(() => {
     if (!token) return;
-    let timer: ReturnType<typeof setInterval> | null = null;
-
-    const startPolling = () => {
-      if (timer) return;
-      timer = setInterval(() => {
-        if (document.visibilityState === "visible") {
-          void loadDashboard();
-        }
-      }, DASHBOARD_POLL_MS);
-    };
-
-    const stopPolling = () => {
-      if (!timer) return;
-      clearInterval(timer);
-      timer = null;
-    };
-
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void loadDashboard();
-        startPolling();
-      } else {
-        stopPolling();
       }
     };
-
     document.addEventListener("visibilitychange", onVisibilityChange);
-    if (document.visibilityState === "visible") {
-      startPolling();
-    }
-
-    return () => {
-      stopPolling();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [loadDashboard, token]);
 
   return (

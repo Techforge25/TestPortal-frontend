@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AdminFooter } from "@/components/admin/components/AdminFooter";
@@ -13,6 +14,7 @@ import {
   saveAdminReviewDecision,
   type AdminReviewDetailResponse,
 } from "@/components/admin/lib/backendApi";
+import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { AppSegmentedControl } from "@/components/shared/ui/AppSegmentedControl";
 
@@ -179,6 +181,7 @@ function ScoreCard({
 }
 
 export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark = false }: AdminResultReviewDetailScreenProps) {
+  const router = useRouter();
   const { isDark, toggleTheme } = useAdminTheme(initialThemeDark);
   const token = getAdminToken();
   const [activeTab, setActiveTab] = useState<ReviewTab>("overview");
@@ -274,11 +277,13 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
 
   useEffect(() => {
     if (!token || !resolvedSubmissionId) return;
+    setIsLoading(true);
     const run = async () => {
       try {
         await loadSubmissionDetail(resolvedSubmissionId);
       } catch (fetchError) {
         const message = fetchError instanceof Error ? fetchError.message : "Failed to load candidate review";
+        setDetail(null);
         setError(message);
       } finally {
         setIsLoading(false);
@@ -286,6 +291,25 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
     };
     void run();
   }, [resolvedSubmissionId, loadSubmissionDetail, token]);
+
+  useRealtimeSubscription({
+    token,
+    enabled: Boolean(token && resolvedSubmissionId && !isLoading),
+    events: [
+      "admin:data.changed",
+      "admin:reviews.updated",
+      `admin:submission.updated:${resolvedSubmissionId}`,
+      `candidate:evaluation.updated:${resolvedSubmissionId}`,
+    ],
+    onEvent: async () => {
+      if (!resolvedSubmissionId) return;
+      try {
+        await loadSubmissionDetail(resolvedSubmissionId);
+      } catch {
+        // Ignore transient realtime refresh failures.
+      }
+    },
+  });
 
   function escapeHtml(value: string) {
     return String(value || "")
@@ -491,13 +515,16 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
             </Link>
 
             <section className={`rounded-[8px] border p-4 ${isDark ? "border-slate-700 bg-slate-900" : "border-[#e2e8f0] bg-white"}`}>
-              <div className="flex items-center gap-3">
-                <h1 className={`text-[48px] font-semibold tracking-[-0.72px] [zoom:0.58] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
-                  {detail?.candidateName || "Candidate"}
-                </h1>
-                <span className="inline-flex h-7 items-center rounded-full border border-[#22c55e] bg-[#f8fafc] px-4 text-[16px] text-[#16a34a] [zoom:0.84]">
-                  {detail?.review?.decision || detail?.status || "In Review"}
-                </span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <h1 className={`text-[48px] font-semibold tracking-[-0.72px] [zoom:0.58] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
+                    {detail?.candidateName || "Candidate"}
+                  </h1>
+                  <span className="inline-flex h-7 items-center rounded-full border border-[#22c55e] bg-[#f8fafc] px-4 text-[16px] text-[#16a34a] [zoom:0.84]">
+                    {detail?.review?.decision || detail?.status || "In Review"}
+                  </span>
+                </div>
+                <div />
               </div>
               <p className={`mt-1 text-[18px] [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
                 {detail?.test ? `${detail.test.position} | ${detail.test.title}` : "No test linked"}
@@ -1015,6 +1042,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
           </div>
         </div>
       ) : null}
+
     </main>
   );
 }

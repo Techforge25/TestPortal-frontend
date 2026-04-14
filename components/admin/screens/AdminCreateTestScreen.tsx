@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { AdminFooter } from "@/components/admin/components/AdminFooter";
 import { AdminSidebar } from "@/components/admin/components/AdminSidebar";
 import { AdminTopHeader } from "@/components/admin/components/AdminTopHeader";
@@ -16,11 +17,15 @@ import { CreateTestSummaryField } from "@/components/admin/components/create-tes
 import { CreateTestStepper, type CreateTestStep } from "@/components/admin/components/create-test/CreateTestStepper";
 import { CreateTestToggle } from "@/components/admin/components/create-test/CreateTestToggle";
 import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
-import { getAdminSecurityDefaults, saveAdminTest, uploadAdminUiPreviewImage } from "@/components/admin/lib/backendApi";
+import {
+  getAdminSecurityDefaults,
+  saveAdminTest,
+  uploadAdminUiPreviewImage,
+  uploadAdminUiTaskPdf,
+} from "@/components/admin/lib/backendApi";
 import {
   clearEditingTestDraft,
   readEditingTestDraft,
-  savePublishedTest,
   type AdminTestListItem,
 } from "@/components/admin/lib/testListStorage";
 
@@ -165,10 +170,17 @@ type UiPreviewPromptPayload = {
   referenceImageUrl: string;
 };
 
+type DesignerUiTaskPromptPayload = {
+  taskPrompt: string;
+  pdfUrl: string;
+  pdfFileName: string;
+  figmaReferenceLink: string;
+};
+
 const rolePresetSections: Record<RoleCategory, string[]> = {
   developer: ["mcq", "coding"],
-  frontend: ["mcq", "ui_preview", "scenario", "portfolio_link", "short_answer"],
-  designer: ["mcq", "scenario", "portfolio_link", "short_answer"],
+  frontend: ["mcq", "ui_preview"],
+  designer: ["mcq", "portfolio_link"],
   video_editor: ["mcq", "scenario", "short_answer", "long_answer"],
   qa_manual: ["mcq", "bug_report", "test_case", "short_answer"],
   hr: ["mcq", "scenario", "long_answer"],
@@ -190,7 +202,8 @@ const sectionDefaultPrompt: Record<NonCodingSectionKey, string> = {
   ui_preview:
     "Recreate the reference screen in code. Add screenshot/link in prompt and evaluate visual match, responsiveness, and clean UI structure.",
   scenario: "Write a real-world scenario question for the candidate.",
-  portfolio_link: "Paste portfolio/link prompt (e.g., Behance, Dribbble, GitHub, drive link).",
+  portfolio_link:
+    "Read the PDF requirement document and open the Figma reference link. Build your design based on those requirements.",
   short_answer: "Write a short answer question.",
   long_answer: "Write a long answer question.",
   bug_report: "Write a bug report analysis question.",
@@ -216,6 +229,42 @@ function buildUiPreviewPrompt(value: UiPreviewPromptPayload): string {
   return JSON.stringify({
     taskPrompt: String(value.taskPrompt || sectionDefaultPrompt.ui_preview),
     referenceImageUrl: String(value.referenceImageUrl || ""),
+  });
+}
+
+function parseDesignerUiTaskPrompt(raw: string): DesignerUiTaskPromptPayload {
+  if (!raw?.trim()) {
+    return {
+      taskPrompt: sectionDefaultPrompt.portfolio_link,
+      pdfUrl: "",
+      pdfFileName: "",
+      figmaReferenceLink: "",
+    };
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<DesignerUiTaskPromptPayload>;
+    return {
+      taskPrompt: String(parsed.taskPrompt || sectionDefaultPrompt.portfolio_link),
+      pdfUrl: /^https?:\/\//i.test(String(parsed.pdfUrl || "")) ? String(parsed.pdfUrl || "") : "",
+      pdfFileName: String(parsed.pdfFileName || ""),
+      figmaReferenceLink: String(parsed.figmaReferenceLink || ""),
+    };
+  } catch {
+    return {
+      taskPrompt: raw,
+      pdfUrl: "",
+      pdfFileName: "",
+      figmaReferenceLink: "",
+    };
+  }
+}
+
+function buildDesignerUiTaskPrompt(value: DesignerUiTaskPromptPayload): string {
+  return JSON.stringify({
+    taskPrompt: String(value.taskPrompt || sectionDefaultPrompt.portfolio_link),
+    pdfUrl: String(value.pdfUrl || ""),
+    pdfFileName: String(value.pdfFileName || ""),
+    figmaReferenceLink: String(value.figmaReferenceLink || ""),
   });
 }
 
@@ -513,6 +562,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
   const [basicInfoErrors, setBasicInfoErrors] = useState<BasicInfoErrors>({});
   const [uiPreviewUploadErrors, setUiPreviewUploadErrors] = useState<Record<string, string>>({});
   const [uiPreviewUploading, setUiPreviewUploading] = useState<Record<string, boolean>>({});
+  const [designerUiTaskUploadErrors, setDesignerUiTaskUploadErrors] = useState<Record<string, string>>({});
   const [securitySettings, setSecuritySettings] = useState({
     forceFullscreen: initialDraft?.securityFlags?.forceFullscreen ?? true,
     disableTabSwitch: initialDraft?.securityFlags?.disableTabSwitch ?? true,
@@ -522,15 +572,19 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     devToolsDetection: initialDraft?.securityFlags?.devToolsDetection ?? true,
   });
   const codingSectionEnabled = enabledSections.includes("coding");
+
+  const getSectionLabelForRole = (sectionKey: string) => {
+    if (roleCategory === "designer" && sectionKey === "portfolio_link") return "UI Task";
+    return getSectionLabel(sectionKey);
+  };
   const isFrontendRole = roleCategory === "frontend";
-  const maxStep = isFrontendRole ? 6 : 5;
+  const maxStep = 5;
   const frontendStepperSteps: Array<{ id: CreateTestStep; label: string }> = [
     { id: 1, label: "Basic Info" },
     { id: 2, label: "Add MCQs" },
     { id: 3, label: "UI Preview Task" },
-    { id: 4, label: "Assessment" },
-    { id: 5, label: "Security" },
-    { id: 6, label: "Publish" },
+    { id: 4, label: "Security" },
+    { id: 5, label: "Publish" },
   ];
 
   useEffect(() => {
@@ -741,7 +795,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
         // Keep local defaults if API fails.
       }
     })();
-  }, [token]);
+  }, [token, initialDraft]);
 
   const buildDefaultQuestion = (id: number): McqQuestion => ({
     id,
@@ -772,17 +826,19 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
   const sectionConfigsPayload = nonCodingEnabledSections.flatMap((sectionKey) =>
     (sectionPrompts[sectionKey] || []).map((item) => ({
       key: sectionKey,
-      title: getSectionLabel(sectionKey),
+      title: getSectionLabelForRole(sectionKey),
       prompt:
         sectionKey === "ui_preview"
           ? buildUiPreviewPrompt(parseUiPreviewPrompt(item.value || ""))
+          : roleCategory === "designer" && sectionKey === "portfolio_link"
+            ? buildDesignerUiTaskPrompt(parseDesignerUiTaskPrompt(item.value || ""))
           : item.value?.trim() || sectionDefaultPrompt[sectionKey],
       instructions: "",
       required: true,
       marks:
         sectionKey === "ui_preview"
           ? Number.parseInt(item.marks || "10", 10) || 10
-          : 0,
+          : 1,
     }))
   );
 
@@ -826,6 +882,9 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     setUiPreviewUploading((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
     );
+    setDesignerUiTaskUploadErrors((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
+    );
   };
 
   useEffect(() => {
@@ -836,6 +895,8 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
 
   const readUiPreviewError = (section: NonCodingSectionKey, id: number) =>
     uiPreviewUploadErrors[`${section}-${id}`] || "";
+  const readDesignerUiTaskError = (section: NonCodingSectionKey, id: number) =>
+    designerUiTaskUploadErrors[`${section}-${id}`] || "";
 
   const readFileAsDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -871,30 +932,22 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     try {
       setUiPreviewUploading((prev) => ({ ...prev, [errorKey]: true }));
       const dataUrl = await readFileAsDataUrl(file);
-
       if (!token) {
-        upsertSectionPrompt(
-          section,
-          id,
-          buildUiPreviewPrompt({
-            ...currentValue,
-            referenceImageUrl: dataUrl,
-          })
-        );
-      } else {
-        const uploaded = await uploadAdminUiPreviewImage(token, {
-          dataUrl,
-          fileName: file.name,
-        });
-        upsertSectionPrompt(
-          section,
-          id,
-          buildUiPreviewPrompt({
-            ...currentValue,
-            referenceImageUrl: uploaded.url,
-          })
-        );
+        throw new Error("Admin session missing. Please login again and retry.");
       }
+
+      const uploaded = await uploadAdminUiPreviewImage(token, {
+        dataUrl,
+        fileName: file.name,
+      });
+      upsertSectionPrompt(
+        section,
+        id,
+        buildUiPreviewPrompt({
+          ...currentValue,
+          referenceImageUrl: uploaded.url,
+        })
+      );
 
       setUiPreviewUploadErrors((prev) => {
         const next = { ...prev };
@@ -910,6 +963,74 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
         delete next[errorKey];
         return next;
       });
+    }
+  };
+
+  const applyDesignerUiTaskPdf = async (
+    section: NonCodingSectionKey,
+    id: number,
+    file: File,
+    currentValue: DesignerUiTaskPromptPayload
+  ) => {
+    const errorKey = `${section}-${id}`;
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      setDesignerUiTaskUploadErrors((prev) => ({
+        ...prev,
+        [errorKey]: "Only PDF file is allowed.",
+      }));
+      return;
+    }
+    if (file.size > 5_000_000) {
+      setDesignerUiTaskUploadErrors((prev) => ({
+        ...prev,
+        [errorKey]: "PDF is too large. Use file up to 5MB.",
+      }));
+      return;
+    }
+
+    if (!token) {
+      setDesignerUiTaskUploadErrors((prev) => ({
+        ...prev,
+        [errorKey]: "Admin session missing. Please login again and retry.",
+      }));
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const uploaded = await uploadAdminUiTaskPdf(token, {
+        dataUrl,
+        fileName: file.name,
+      });
+      if (!/^https?:\/\//i.test(String(uploaded.url || ""))) {
+        throw new Error("Invalid PDF URL returned by upload service.");
+      }
+
+      upsertSectionPrompt(
+        section,
+        id,
+        buildDesignerUiTaskPrompt({
+          ...currentValue,
+          pdfUrl: uploaded.url,
+          pdfFileName: file.name,
+        })
+      );
+      setDesignerUiTaskUploadErrors((prev) => {
+        const next = { ...prev };
+        delete next[errorKey];
+        return next;
+      });
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "Failed to upload PDF";
+      const message =
+        rawMessage.toLowerCase().includes("route not found")
+          ? "PDF upload endpoint not found on backend. Deploy latest backend changes."
+          : rawMessage;
+      setDesignerUiTaskUploadErrors((prev) => ({
+        ...prev,
+        [errorKey]: message,
+      }));
     }
   };
 
@@ -1001,105 +1122,66 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
 
   async function handlePublishTest() {
     setPublishError("");
+    const liveToken = getAdminToken();
+    if (!liveToken) {
+      setPublishError("Admin session expired. Please login again.");
+      router.push("/admin");
+      return;
+    }
     const duration = Number.parseInt(totalDuration, 10);
-    const mcqs = Number.parseInt(totalMcqs, 10);
-    const coding = Number.parseInt(totalCodingTasks, 10);
-    const now = new Date();
-    const created = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     let createdTest: AdminTestListItem | null = null;
 
-    if (token) {
-      try {
-        createdTest = await saveAdminTest(token, {
-          id: editingTestMeta?.id,
-          testName: testName.trim() || "Untitled Test",
-          position: position.trim() || "Not Specified",
-          duration: Number.isFinite(duration) && duration > 0 ? duration : 60,
-          passPercentage: Number.parseInt(passPercentage, 10) || 0,
-          roleCategory,
-          enabledSections,
-          sectionConfigs: sectionConfigsPayload,
-          status: publishStatus,
-          warningLimit: Number.parseInt(warningLimit, 10) || 2,
-          autoSaveIntervalSeconds: Number.parseInt(autoSaveInterval, 10) || 60,
-          securityFlags: {
-            forceFullscreen: securitySettings.forceFullscreen,
-            disableTabSwitch: securitySettings.disableTabSwitch,
-            autoEndOnTabChange: securitySettings.autoEndOnTabChange,
-            disableCopyPaste: securitySettings.disableCopyPaste,
-            disableRightClick: securitySettings.disableRightClick,
-            devToolsDetection: securitySettings.devToolsDetection,
-          },
-          mcqQuestions: mcqQuestions.map((item) => ({
-            prompt: item.prompt.trim() || "Question",
-            options: item.options.map((option) => option.trim() || "Option"),
-            selectedIndex: item.selectedIndex,
-            marks: Number.parseInt(item.marks, 10) || 1,
-          })),
-          codingTasks: codingSectionEnabled
-            ? codingTasks.map((item) => ({
-                taskName: item.taskName.trim() || "Task",
-                description: item.description.trim() || "Task description",
-                language: item.language,
-                marks: Number.parseInt(item.marks, 10) || 10,
-                sampleInput: item.testCases.find((testCase) => !testCase.isHidden)?.input || item.testCases[0]?.input || "",
-                sampleOutput:
-                  item.testCases.find((testCase) => !testCase.isHidden)?.expectedOutput ||
-                  item.testCases[0]?.expectedOutput ||
-                  "",
-                testCases: item.testCases.map((testCase) => ({
-                  input: testCase.input,
-                  expectedOutput: testCase.expectedOutput,
-                  isHidden: testCase.isHidden,
-                  weight: Number.parseInt(testCase.weight, 10) || 1,
-                })),
-              }))
-            : [],
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to publish test";
-        setPublishError(message);
-        return;
-      }
-    } else {
-      createdTest = savePublishedTest(
-        {
-          testName: testName.trim() || "Untitled Test",
-          position: position.trim() || "Not Specified",
-          duration: Number.isFinite(duration) && duration > 0 ? duration : 60,
-          passPercentage: Number.parseInt(passPercentage, 10) || 0,
-          roleCategory,
-          enabledSections,
-          sectionConfigs: sectionConfigsPayload,
-          mcqs: Number.isFinite(mcqs) && mcqs > 0 ? mcqs : mcqQuestions.length || 1,
-          coding: codingSectionEnabled ? (Number.isFinite(coding) && coding > 0 ? coding : codingTasks.length || 1) : 0,
-          mcqQuestionItems: mcqQuestions.map((item) => item.prompt),
-          codingTaskItems: codingSectionEnabled ? codingTasks.map((item) => item.taskName) : [],
-          mcqQuestionsDetailed: mcqQuestions.map((item) => ({
-            prompt: item.prompt,
-            options: item.options,
-            selectedIndex: item.selectedIndex,
-            marks: Number.parseInt(item.marks, 10) || 1,
-          })),
-          codingTasksDetailed: codingSectionEnabled
-            ? codingTasks.map((item) => ({
-                taskName: item.taskName,
-                language: item.language,
-                description: item.description,
-                marks: Number.parseInt(item.marks, 10) || 1,
-                testCases: item.testCases.map((testCase) => ({
-                  input: testCase.input,
-                  expectedOutput: testCase.expectedOutput,
-                  isHidden: testCase.isHidden,
-                  weight: Number.parseInt(testCase.weight, 10) || 1,
-                })),
-              }))
-            : [],
-          status: publishStatus === "active" ? "Active" : "Draft",
-          created,
+    try {
+      createdTest = await saveAdminTest(liveToken, {
+        id: editingTestMeta?.id,
+        testName: testName.trim() || "Untitled Test",
+        position: position.trim() || "Not Specified",
+        duration: Number.isFinite(duration) && duration > 0 ? duration : 60,
+        passPercentage: Number.parseInt(passPercentage, 10) || 0,
+        roleCategory,
+        enabledSections,
+        sectionConfigs: sectionConfigsPayload,
+        status: publishStatus,
+        warningLimit: Number.parseInt(warningLimit, 10) || 2,
+        autoSaveIntervalSeconds: Number.parseInt(autoSaveInterval, 10) || 60,
+        securityFlags: {
+          forceFullscreen: securitySettings.forceFullscreen,
+          disableTabSwitch: securitySettings.disableTabSwitch,
+          autoEndOnTabChange: securitySettings.autoEndOnTabChange,
+          disableCopyPaste: securitySettings.disableCopyPaste,
+          disableRightClick: securitySettings.disableRightClick,
+          devToolsDetection: securitySettings.devToolsDetection,
         },
-        editingTestMeta ? { id: editingTestMeta.id, passcode: editingTestMeta.passcode } : undefined
-      );
+        mcqQuestions: mcqQuestions.map((item) => ({
+          prompt: item.prompt.trim() || "Question",
+          options: item.options.map((option) => option.trim() || "Option"),
+          selectedIndex: item.selectedIndex,
+          marks: Number.parseInt(item.marks, 10) || 1,
+        })),
+        codingTasks: codingSectionEnabled
+          ? codingTasks.map((item) => ({
+              taskName: item.taskName.trim() || "Task",
+              description: item.description.trim() || "Task description",
+              language: item.language,
+              marks: Number.parseInt(item.marks, 10) || 10,
+              sampleInput: item.testCases.find((testCase) => !testCase.isHidden)?.input || item.testCases[0]?.input || "",
+              sampleOutput:
+                item.testCases.find((testCase) => !testCase.isHidden)?.expectedOutput ||
+                item.testCases[0]?.expectedOutput ||
+                "",
+              testCases: item.testCases.map((testCase) => ({
+                input: testCase.input,
+                expectedOutput: testCase.expectedOutput,
+                isHidden: testCase.isHidden,
+                weight: Number.parseInt(testCase.weight, 10) || 1,
+              })),
+            }))
+          : [],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to publish test";
+      setPublishError(message);
+      return;
     }
 
     if (!createdTest) return;
@@ -1132,8 +1214,14 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
             <CreateTestStepper
               currentStep={step}
               isDark={isDark}
-              includeCodingStep={!isFrontendRole && codingSectionEnabled}
-              stepThreeLabel={codingSectionEnabled ? "Coding Tasks" : "Assessment"}
+              includeCodingStep={!isFrontendRole}
+              stepThreeLabel={
+                codingSectionEnabled
+                  ? "Coding Tasks"
+                  : roleCategory === "designer"
+                    ? "UI Task"
+                    : "Assessment"
+              }
               customSteps={isFrontendRole ? frontendStepperSteps : undefined}
             />
 
@@ -1380,7 +1468,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
               </CreateTestCard>
             ) : null}
 
-            {((!isFrontendRole && step === 3) || (isFrontendRole && (step === 3 || step === 4))) ? (
+            {step === 3 ? (
               codingSectionEnabled && !isFrontendRole ? (
                 <CreateTestCard
                   title="Add Coding Tasks"
@@ -1561,13 +1649,18 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                 </CreateTestCard>
               ) : (
                 <CreateTestCard
-                  title={isFrontendRole && step === 3 ? "UI Preview Task" : "Assessment Sections"}
+                  title={
+                    isFrontendRole
+                      ? "UI Preview Task"
+                      : roleCategory === "designer"
+                        ? "UI Task"
+                        : "Assessment Sections"
+                  }
                   subtitle={`${
                     enabledSections
                       .filter((section) => nonCodingSectionKeys.includes(section as NonCodingSectionKey))
                       .filter((section) => {
-                        if (isFrontendRole && step === 3) return section === "ui_preview";
-                        if (isFrontendRole && step === 4) return section !== "ui_preview";
+                        if (isFrontendRole) return section === "ui_preview";
                         return true;
                       }).length
                   } Sections Enabled`}
@@ -1577,8 +1670,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                     {enabledSections
                       .filter((section) => nonCodingSectionKeys.includes(section as NonCodingSectionKey))
                       .filter((section) => {
-                        if (isFrontendRole && step === 3) return section === "ui_preview";
-                        if (isFrontendRole && step === 4) return section !== "ui_preview";
+                        if (isFrontendRole) return section === "ui_preview";
                         return true;
                       })
                       .map((section) => {
@@ -1601,7 +1693,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                                   isDark ? "border-slate-600 bg-slate-800 text-slate-100" : "border-[#3254a3] bg-[#f3f4f6] text-[#1f3a8a]"
                                 }`}
                               >
-                                {getSectionLabel(sectionKey)}
+                                {getSectionLabelForRole(sectionKey)}
                               </span>
                               <AppButton
                                 variant="secondary"
@@ -1714,11 +1806,114 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                                               <p className={`text-xs ${isDark ? "text-slate-300" : "text-[#1f3a8a]"}`}>Uploading screenshot...</p>
                                             ) : null}
                                             {parsed.referenceImageUrl ? (
-                                              <img
+                                              <Image
                                                 src={parsed.referenceImageUrl}
                                                 alt="UI task reference"
                                                 className="max-h-[220px] w-full rounded-[8px] border border-[#dbe3ef] object-contain"
+                                                width={1200}
+                                                height={700}
+                                                unoptimized
                                               />
+                                            ) : null}
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  ) : roleCategory === "designer" && sectionKey === "portfolio_link" ? (
+                                    <div className="w-full space-y-2 rounded-[10px] border border-[#dbe3ef] p-3">
+                                      {(() => {
+                                        const parsed = parseDesignerUiTaskPrompt(item.value || "");
+                                        return (
+                                          <>
+                                            <textarea
+                                              value={parsed.taskPrompt}
+                                              onChange={(event) =>
+                                                upsertSectionPrompt(
+                                                  sectionKey,
+                                                  item.id,
+                                                  buildDesignerUiTaskPrompt({
+                                                    ...parsed,
+                                                    taskPrompt: event.target.value,
+                                                  })
+                                                )
+                                              }
+                                              className={`h-[86px] w-full resize-none rounded-[8px] border px-3 py-3 text-[16px] outline-none placeholder:text-[#98a2b3] ${
+                                                isDark
+                                                  ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-400"
+                                                  : "border-[#dbe3ef] bg-white text-[#0f172a]"
+                                              }`}
+                                              placeholder={sectionDefaultPrompt.portfolio_link}
+                                            />
+                                            <input
+                                              value={parsed.figmaReferenceLink}
+                                              onChange={(event) =>
+                                                upsertSectionPrompt(
+                                                  sectionKey,
+                                                  item.id,
+                                                  buildDesignerUiTaskPrompt({
+                                                    ...parsed,
+                                                    figmaReferenceLink: event.target.value,
+                                                  })
+                                                )
+                                              }
+                                              className={`h-[48px] w-full rounded-[8px] border px-3 text-[15px] outline-none placeholder:text-[#98a2b3] ${
+                                                isDark
+                                                  ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-400"
+                                                  : "border-[#dbe3ef] bg-white text-[#0f172a]"
+                                              }`}
+                                              placeholder="Figma link (https://www.figma.com/...)"
+                                            />
+      <input
+        value={parsed.pdfUrl}
+        readOnly
+        className={`h-[48px] w-full rounded-[8px] border px-3 text-[15px] outline-none ${
+          isDark
+            ? "border-slate-600 bg-slate-800 text-slate-100"
+            : "border-[#dbe3ef] bg-[#f8fafc] text-[#0f172a]"
+        }`}
+        placeholder="Upload PDF to generate Cloudinary URL"
+      />
+                                            <div
+                                              className={`rounded-[10px] border border-dashed p-3 ${
+                                                isDark
+                                                  ? "border-slate-600 bg-slate-800/40"
+                                                  : "border-[#cbd5e1] bg-[#f8fafc]"
+                                              }`}
+                                            >
+                                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <p className={`text-xs ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
+                                                  Upload requirement document (PDF)
+                                                </p>
+                                                <span className={`text-xs ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>
+                                                  PDF up to 5MB
+                                                </span>
+                                              </div>
+                                              <div className="mt-2 flex items-center justify-between">
+                                                <label
+                                                  htmlFor={`designer-ui-task-upload-${item.id}`}
+                                                  className="inline-flex cursor-pointer items-center rounded-[8px] border border-[#1f3a8a] px-3 py-2 text-sm font-medium text-[#1f3a8a]"
+                                                >
+                                                  Upload PDF
+                                                </label>
+                                                <input
+                                                  id={`designer-ui-task-upload-${item.id}`}
+                                                  type="file"
+                                                  accept="application/pdf,.pdf"
+                                                  className="hidden"
+                                                  onChange={(event) => {
+                                                    const file = event.target.files?.[0];
+                                                    if (!file) return;
+                                                    void applyDesignerUiTaskPdf(sectionKey, item.id, file, parsed);
+                                                    event.currentTarget.value = "";
+                                                  }}
+                                                />
+                                                <span className={`text-xs ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>
+                                                  {parsed.pdfFileName || "No PDF selected"}
+                                                </span>
+                                              </div>
+                                            </div>
+                                            {readDesignerUiTaskError(sectionKey, item.id) ? (
+                                              <p className="text-xs text-red-600">{readDesignerUiTaskError(sectionKey, item.id)}</p>
                                             ) : null}
                                           </>
                                         );
@@ -1760,7 +1955,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                                   <button
                                     type="button"
                                     onClick={() => deleteSectionPrompt(sectionKey, item.id)}
-                                    aria-label={`Delete ${getSectionLabel(sectionKey)} item ${item.id}`}
+                                    aria-label={`Delete ${getSectionLabelForRole(sectionKey)} item ${item.id}`}
                                     className="mt-2 shrink-0"
                                   >
                                     <TrashIcon />
@@ -1776,7 +1971,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
               )
             ) : null}
 
-            {((!isFrontendRole && step === 4) || (isFrontendRole && step === 5)) ? (
+            {step === 4 ? (
               <CreateTestCard
                 title="Security Configuration"
                 subtitle="Configure Proctoring And Security Settings"
@@ -1874,7 +2069,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
               </CreateTestCard>
             ) : null}
 
-            {((!isFrontendRole && step === 5) || (isFrontendRole && step === 6)) ? (
+            {step === 5 ? (
               <CreateTestCard
                 title="Review & Publish"
                 subtitle="Review Your Test Configuration Before Publishing"
@@ -1902,7 +2097,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                       value={
                         enabledSections
                           .filter((section) => section !== "mcq")
-                          .map((section) => getSectionLabel(section))
+                          .map((section) => getSectionLabelForRole(section))
                           .join(", ") || "MCQs"
                       }
                       isDark={isDark}

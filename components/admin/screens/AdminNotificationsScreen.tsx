@@ -12,6 +12,7 @@ import {
   type AdminNotificationItem,
 } from "@/components/admin/lib/backendApi";
 import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
+import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 
 function NotificationStatusIcon() {
   return (
@@ -50,6 +51,7 @@ type AdminNotificationsScreenProps = {
 
 export function AdminNotificationsScreen({ initialThemeDark = false }: AdminNotificationsScreenProps) {
   const { isDark, toggleTheme } = useAdminTheme(initialThemeDark);
+  const token = getAdminToken();
   const [notifications, setNotifications] = useState<AdminNotificationItem[]>([]);
 
   async function refreshNotifications() {
@@ -69,6 +71,15 @@ export function AdminNotificationsScreen({ initialThemeDark = false }: AdminNoti
   useEffect(() => {
     void refreshNotifications();
   }, []);
+
+  useRealtimeSubscription({
+    token,
+    events: ["admin:notifications.updated", "admin:data.changed"],
+    onEvent: async () => {
+      await refreshNotifications();
+    },
+    enabled: Boolean(token),
+  });
 
   const sortedNotifications = useMemo(
     () =>

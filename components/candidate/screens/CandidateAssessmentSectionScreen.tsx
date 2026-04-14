@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { saveCandidateDraft, submitCandidateTest } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
+import { useCandidateRealtimeState } from "@/components/candidate/hooks/useCandidateRealtimeState";
 import {
   UiPreviewTaskEditor,
   DEFAULT_REACT_UI_PREVIEW_CODE,
   type UiPreviewAnswer,
 } from "@/components/candidate/components/UiPreviewTaskEditor";
 import {
-  readCandidateSession,
   saveCandidateResultSummary,
   saveCandidateSession,
 } from "@/components/candidate/lib/candidateSessionStorage";
@@ -55,7 +55,7 @@ function WarningIcon() {
 function sectionPlaceholder(key: SectionConfig["key"]) {
   switch (key) {
     case "portfolio_link":
-      return "https://...";
+      return "Paste your final Figma design link...";
     case "scenario":
       return "Write your scenario-based response";
     case "ui_preview":
@@ -70,6 +70,43 @@ function sectionPlaceholder(key: SectionConfig["key"]) {
       return "Write test cases / QA approach";
     default:
       return "Write your answer";
+  }
+}
+
+function parseDesignerUiTaskPrompt(raw: string): {
+  taskPrompt: string;
+  pdfUrl: string;
+  pdfFileName: string;
+  figmaReferenceLink: string;
+} {
+  if (!raw?.trim()) {
+    return {
+      taskPrompt: "Read the requirement document and complete the design task in Figma.",
+      pdfUrl: "",
+      pdfFileName: "",
+      figmaReferenceLink: "",
+    };
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      taskPrompt?: string;
+      pdfUrl?: string;
+      pdfFileName?: string;
+      figmaReferenceLink?: string;
+    };
+    return {
+      taskPrompt: String(parsed.taskPrompt || "Read the requirement document and complete the design task in Figma."),
+      pdfUrl: /^https?:\/\//i.test(String(parsed.pdfUrl || "")) ? String(parsed.pdfUrl || "") : "",
+      pdfFileName: String(parsed.pdfFileName || ""),
+      figmaReferenceLink: String(parsed.figmaReferenceLink || ""),
+    };
+  } catch {
+    return {
+      taskPrompt: raw,
+      pdfUrl: "",
+      pdfFileName: "",
+      figmaReferenceLink: "",
+    };
   }
 }
 
@@ -127,7 +164,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
   const router = useRouter();
   const branding = usePublicBranding();
   const [isHydrated, setIsHydrated] = useState(false);
-  const session = useMemo(() => readCandidateSession(), []);
+  const { session } = useCandidateRealtimeState();
 
   useEffect(() => {
     setIsHydrated(true);
@@ -136,8 +173,13 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
   const allConfigs = useMemo<SectionConfig[]>(() => {
     const all = session?.test?.sectionConfigs || [];
     const enabled = new Set((session?.test?.enabledSections || []).map((v) => String(v)));
-    const filtered = all.filter((item) => enabled.has(item.key));
-    if (filtered.length > 0) return filtered;
+    if (all.length > 0) {
+      // Prefer server-provided section configs. If enabledSections is stale/missing,
+      // do not hide valid configured sections.
+      if (enabled.size === 0) return all;
+      const filtered = all.filter((item) => enabled.has(item.key));
+      return filtered.length > 0 ? filtered : all;
+    }
 
     const fallbackKeys: SectionConfig["key"][] = [
       "ui_preview",
@@ -188,6 +230,40 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       return acc;
     }, {});
   });
+
+  useEffect(() => {
+    const existing = session?.sectionAnswers || [];
+    setAnswers(
+      existing.reduce<Record<number, string>>((acc, item) => {
+        acc[item.itemIndex] = item.answer;
+        return acc;
+      }, {})
+    );
+    setUiPreviewAnswers(
+      existing.reduce<Record<number, UiPreviewAnswer>>((acc, item) => {
+        if (item.sectionKey !== "ui_preview") return acc;
+        acc[item.itemIndex] = parseUiPreviewAnswer(item.answer || "");
+        return acc;
+      }, {})
+    );
+  }, [session?.submissionId, session?.sectionAnswers]);
+
+  useEffect(() => {
+    if (!session?.submissionId || !session?.candidateSessionToken) return;
+    const sectionAnswers = allConfigs.map((config) => ({
+      sectionKey: config.key,
+      itemIndex: config.index,
+      answer: String(answers[config.index] || ""),
+    }));
+    const currentSerialized = JSON.stringify(session.sectionAnswers || []);
+    const nextSerialized = JSON.stringify(sectionAnswers);
+    if (currentSerialized === nextSerialized) return;
+    saveCandidateSession({
+      ...session,
+      sectionAnswers,
+    });
+  }, [allConfigs, answers, session]);
+
   useEffect(() => {
     if (!configs.length) return;
     const uiConfigs = configs.filter((cfg) => cfg.key === "ui_preview");
@@ -223,18 +299,28 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
     }
     const portfolio = configs.filter((section) => section.key === "portfolio_link");
     const others = configs.filter((section) => section.key !== "portfolio_link");
-    return portfolio.length > 0 ? [others, portfolio] : [others];
+    if (portfolio.length > 0) {
+      return others.length > 0 ? [others, portfolio] : [portfolio];
+    }
+    return [others];
   }, [configs, mode]);
   const currentSections = assessmentPages[currentPage] || [];
   const totalPages = Math.max(assessmentPages.length, 1);
-  const isPortfolioOnlyPage =
+  const isDesignerUiTaskPage =
     mode === "assessment" &&
+    session?.test?.roleCategory === "designer" &&
     currentSections.length > 0 &&
     currentSections.every((section) => section.key === "portfolio_link");
+  const pageTitle =
+    mode === "ui_preview"
+      ? "UI Preview Task"
+      : isDesignerUiTaskPage
+        ? "UI Task"
+        : "Assessment Questions";
 
   const effectiveSecurity = useMemo(() => {
     const base = session?.test?.security || {};
-    if (!isPortfolioOnlyPage) return base;
+    if (!isDesignerUiTaskPage) return base;
     return {
       ...base,
       forceFullscreen: false,
@@ -244,7 +330,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       disableRightClick: false,
       detectDevTools: false,
     };
-  }, [isPortfolioOnlyPage, session?.test?.security]);
+  }, [isDesignerUiTaskPage, session?.test?.security]);
 
   const { deadlineAt, warningCount, warningPopup, dismissWarningPopup } = useCandidateSecurityGuard({
     submissionId: session?.submissionId || "",
@@ -437,7 +523,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
           >
             <div>
               <h1 className="text-[24px] font-semibold text-[#0f172a]">
-                {mode === "ui_preview" ? "UI Preview Task" : "Assessment Questions"}
+                {pageTitle}
               </h1>
               <div className="mt-1 flex items-center gap-2">
                 <p className="text-sm text-[#64748b]">{branding.companyName || "Techforge Innovation"}</p>
@@ -458,7 +544,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
               >
                 <CandidateCountdown deadlineAt={deadlineAt} className="text-[16px] font-semibold text-[#0f172a]" />
               </div>
-              {!isPortfolioOnlyPage ? (
+              {!isDesignerUiTaskPage ? (
                 <div className="flex h-[44px] items-center gap-2 rounded-[10px] border border-[#ffd8aa] bg-[#fff2e4] px-3">
                   <WarningIcon />
                   <p className="text-sm font-semibold text-[#d97706]">{warningCount} Warning{warningCount === 1 ? "" : "s"}</p>
@@ -481,15 +567,58 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                     key={`${section.key}-${section.index}`}
                     className={itemIndex > 0 ? `border-t pt-4 ${mode === "ui_preview" ? "border-[#dfe7ff]" : "border-[#e2e8f0]"}` : ""}
                   >
+                    {(() => {
+                      const designerPrompt =
+                        section.key === "portfolio_link" && session?.test?.roleCategory === "designer"
+                          ? parseDesignerUiTaskPrompt(section.prompt || "")
+                          : null;
+                      return (
+                        <>
                     <h2 className={`font-semibold text-[#0f172a] ${mode === "ui_preview" ? "text-[28px]" : "text-[24px]"}`}>
                       {section.index + 1}. {section.title}
                     </h2>
                     {section.prompt ? (
                       <p className={`mt-1 text-[#475569] ${mode === "ui_preview" ? "text-[15px]" : "text-sm"}`}>
-                        {section.key === "ui_preview" ? parseUiPreviewPrompt(section).taskPrompt : section.prompt}
+                        {section.key === "ui_preview"
+                          ? parseUiPreviewPrompt(section).taskPrompt
+                          : designerPrompt
+                            ? designerPrompt.taskPrompt
+                            : section.prompt}
                       </p>
                     ) : null}
                     {section.instructions ? <p className="mt-1 text-xs text-[#64748b]">{section.instructions}</p> : null}
+                    {designerPrompt ? (
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {designerPrompt.pdfUrl ? (
+                          <a
+                            href={designerPrompt.pdfUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-[48px] items-center justify-center rounded-[8px] border border-[#1f3a8a] bg-[#eef2ff] px-4 text-sm font-medium text-[#1f3a8a]"
+                          >
+                            {designerPrompt.pdfFileName || "Open Requirement PDF"}
+                          </a>
+                        ) : (
+                          <div className="inline-flex h-[48px] items-center justify-center rounded-[8px] border border-[#dbe3ef] bg-[#f8fafc] px-4 text-sm text-[#64748b]">
+                            Requirement PDF not attached
+                          </div>
+                        )}
+                        {designerPrompt.figmaReferenceLink ? (
+                          <a
+                            href={designerPrompt.figmaReferenceLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-[48px] items-center justify-center rounded-[8px] border border-[#1f3a8a] bg-white px-4 text-sm font-medium text-[#1f3a8a]"
+                          >
+                            Open Figma Link
+                          </a>
+                        ) : (
+                          <div className="inline-flex h-[48px] items-center justify-center rounded-[8px] border border-[#dbe3ef] bg-[#f8fafc] px-4 text-sm text-[#64748b]">
+                            Figma link not attached
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
                     {section.key === "scenario" || section.key === "long_answer" || section.key === "bug_report" || section.key === "test_case" ? (
                       <textarea
                         value={answers[section.index] || ""}
@@ -519,6 +648,9 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                         className="mt-3 h-[52px] w-full rounded-[8px] border border-[#dbe3ef] bg-white px-3 text-[15px] text-[#0f172a] outline-none placeholder:text-[#98a2b3] focus:border-[#1f3a8a]"
                       />
                     )}
+                        </>
+                      );
+                    })()}
                   </div>
                 ))}
               </section>
@@ -558,7 +690,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
         </article>
       </section>
 
-      {!isPortfolioOnlyPage && warningPopup ? (
+      {!isDesignerUiTaskPage && warningPopup ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0f172a]/55 px-4">
           <div className="w-full max-w-[460px] rounded-[12px] border border-[#f5c172] bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.26)]">
             <div className="flex items-start gap-3">

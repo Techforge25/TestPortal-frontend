@@ -3,6 +3,8 @@ type RuntimeState = {
   warningCount: number;
 };
 
+export const CANDIDATE_RUNTIME_EVENT = "candidate-runtime-updated";
+
 function key(submissionId: string) {
   return `candidate_runtime_${submissionId}`;
 }
@@ -21,10 +23,19 @@ export function readRuntimeState(submissionId: string): RuntimeState | null {
 export function saveRuntimeState(submissionId: string, next: RuntimeState) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(key(submissionId), JSON.stringify(next));
+  window.dispatchEvent(
+    new CustomEvent(CANDIDATE_RUNTIME_EVENT, {
+      detail: { submissionId },
+    })
+  );
 }
 
 export function clearRuntimeState(submissionId: string) {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(key(submissionId));
+  window.dispatchEvent(
+    new CustomEvent(CANDIDATE_RUNTIME_EVENT, {
+      detail: { submissionId },
+    })
+  );
 }
-

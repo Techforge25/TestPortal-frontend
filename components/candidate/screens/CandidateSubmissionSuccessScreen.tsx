@@ -7,6 +7,7 @@ import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
 import { getSupportedSections, isCodingEnabled, isMcqEnabled } from "@/components/candidate/lib/assessmentFlow";
 import { calculateMcqScore, calculateMcqTotal } from "@/components/candidate/security/scoring";
 import { AppButton } from "@/components/shared/ui/AppButton";
+import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 import {
   clearCandidateSession,
   readCandidateSession,
@@ -126,7 +127,7 @@ export function CandidateSubmissionSuccessScreen() {
       : null
   );
   const [evalFetchError, setEvalFetchError] = useState(false);
-  const [pollStartedAt] = useState(() => Date.now());
+  const [statusWatchStartedAt] = useState(() => Date.now());
 
   useEffect(() => {
     setMcqSummary({
@@ -137,16 +138,14 @@ export function CandidateSubmissionSuccessScreen() {
 
   useEffect(() => {
     if (!session?.submissionId || !session?.candidateSessionToken) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const poll = async () => {
+    const submissionId = session.submissionId;
+    const candidateSessionToken = session.candidateSessionToken;
+    async function refreshEvaluationStatus() {
       try {
         const result = await getCandidateEvaluationStatus({
-          submissionId: session.submissionId,
-          candidateSessionToken: session.candidateSessionToken,
+          submissionId,
+          candidateSessionToken,
         });
-        if (cancelled) return;
         setEvalFetchError(false);
         const next = result?.evaluation;
         const backendMcqScore = Number(next?.mcqScore);
@@ -167,25 +166,55 @@ export function CandidateSubmissionSuccessScreen() {
           totalMarks: Number(next?.totalMarks || 0),
           maxMarks: Number(next?.maxMarks || 0),
         });
-
-        if (
-          codingEnabled &&
-          !["completed", "failed", "not_required"].includes(String(next?.status || ""))
-        ) {
-          timer = setTimeout(poll, 1200);
-        }
       } catch {
-        if (!cancelled) setEvalFetchError(true);
-        if (!cancelled && codingEnabled) timer = setTimeout(poll, 1800);
+        setEvalFetchError(true);
       }
-    };
+    }
+    void refreshEvaluationStatus();
+  }, [session?.submissionId, session?.candidateSessionToken]);
 
-    poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [codingEnabled, session?.submissionId, session?.candidateSessionToken]);
+  useRealtimeSubscription({
+    token: session?.candidateSessionToken || null,
+    events: [
+      "candidate:evaluation.updated",
+      `candidate:evaluation.updated:${session?.submissionId || ""}`,
+      "candidate:data.changed",
+    ],
+    onEvent: async () => {
+      if (!session?.submissionId || !session?.candidateSessionToken) return;
+      const submissionId = session.submissionId;
+      const candidateSessionToken = session.candidateSessionToken;
+      try {
+        const result = await getCandidateEvaluationStatus({
+          submissionId,
+          candidateSessionToken,
+        });
+        setEvalFetchError(false);
+        const next = result?.evaluation;
+        const backendMcqScore = Number(next?.mcqScore);
+        const backendMcqTotal = Number(next?.mcqTotal);
+        if (
+          Number.isFinite(backendMcqScore) &&
+          backendMcqScore >= 0 &&
+          Number.isFinite(backendMcqTotal) &&
+          backendMcqTotal >= 0
+        ) {
+          setMcqSummary({
+            score: backendMcqScore,
+            total: backendMcqTotal,
+          });
+        }
+        setCodingEval({
+          status: next?.status || "queued",
+          totalMarks: Number(next?.totalMarks || 0),
+          maxMarks: Number(next?.maxMarks || 0),
+        });
+      } catch {
+        setEvalFetchError(true);
+      }
+    },
+    enabled: Boolean(session?.submissionId && session?.candidateSessionToken),
+  });
 
   const codingStatusText =
     codingEval?.status === "completed"
@@ -202,7 +231,7 @@ export function CandidateSubmissionSuccessScreen() {
   const isDelayedEvaluation =
     Boolean(codingEnabled) &&
     (codingEval?.status === "queued" || codingEval?.status === "running" || !codingEval) &&
-    Date.now() - pollStartedAt > 20000;
+    Date.now() - statusWatchStartedAt > 20000;
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#e7f0ea] via-[#d0dce8] to-[#adbfdf] px-4 py-10">

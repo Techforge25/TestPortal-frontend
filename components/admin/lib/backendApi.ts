@@ -665,6 +665,13 @@ export async function saveAdminReviewDecision(
   });
 }
 
+export async function deleteAdminReviewSubmission(token: string, submissionId: string) {
+  return request<{ message: string }>(`/api/admin/reviews/${submissionId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export type AdminCandidateRow = {
   id: string;
   candidate: string;
@@ -1032,6 +1039,20 @@ export async function uploadAdminUiPreviewImage(
 ) {
   return request<{ message: string; url: string; publicId?: string }>(
     "/api/admin/settings/uploads/ui-preview-image",
+    {
+      method: "POST",
+      token,
+      body: payload,
+    }
+  );
+}
+
+export async function uploadAdminUiTaskPdf(
+  token: string,
+  payload: { dataUrl: string; fileName?: string }
+) {
+  return request<{ message: string; url: string; publicId?: string }>(
+    "/api/admin/settings/uploads/ui-task-pdf",
     {
       method: "POST",
       token,

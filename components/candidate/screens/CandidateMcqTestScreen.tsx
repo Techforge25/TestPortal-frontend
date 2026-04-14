@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import { saveCandidateDraft, submitCandidateTest } from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
+import { useCandidateRealtimeState } from "@/components/candidate/hooks/useCandidateRealtimeState";
 import {
-  readCandidateSession,
   saveCandidateResultSummary,
   saveCandidateSession,
 } from "@/components/candidate/lib/candidateSessionStorage";
@@ -141,11 +141,53 @@ function OptionItem({ label, selected, onClick }: OptionItemProps) {
 export function CandidateMcqTestScreen() {
   const router = useRouter();
   const branding = usePublicBranding();
-  const session = useMemo(() => readCandidateSession(), []);
+  const { session } = useCandidateRealtimeState();
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>(() => {
+    const existing = session?.mcqAnswers || [];
+    return existing.reduce<Record<number, number>>((acc, item) => {
+      if (
+        Number.isInteger(item?.questionIndex) &&
+        Number.isInteger(item?.selectedOptionIndex) &&
+        item.selectedOptionIndex >= 0
+      ) {
+        acc[item.questionIndex] = item.selectedOptionIndex;
+      }
+      return acc;
+    }, {});
+  });
   const [error, setError] = useState("");
   const mcqEnabled = isMcqEnabled(session);
+
+  useEffect(() => {
+    const existing = session?.mcqAnswers || [];
+    const mapped = existing.reduce<Record<number, number>>((acc, item) => {
+      if (
+        Number.isInteger(item?.questionIndex) &&
+        Number.isInteger(item?.selectedOptionIndex) &&
+        item.selectedOptionIndex >= 0
+      ) {
+        acc[item.questionIndex] = item.selectedOptionIndex;
+      }
+      return acc;
+    }, {});
+    setSelectedAnswers(mapped);
+  }, [session?.submissionId, session?.mcqAnswers]);
+
+  useEffect(() => {
+    if (!session?.submissionId || !session?.candidateSessionToken) return;
+    const mcqAnswers = Object.entries(selectedAnswers).map(([questionIndex, selectedOptionIndex]) => ({
+      questionIndex: Number(questionIndex),
+      selectedOptionIndex,
+    }));
+    const currentSerialized = JSON.stringify(session.mcqAnswers || []);
+    const nextSerialized = JSON.stringify(mcqAnswers);
+    if (currentSerialized === nextSerialized) return;
+    saveCandidateSession({
+      ...session,
+      mcqAnswers,
+    });
+  }, [selectedAnswers, session]);
 
   const questions = useMemo<LocalMcqQuestion[]>(
     () =>
@@ -231,6 +273,7 @@ export function CandidateMcqTestScreen() {
         });
         saveCandidateSession({
           ...session,
+          mcqSectionSubmitted: true,
           mcqAnswers,
         });
       } catch (submitError) {

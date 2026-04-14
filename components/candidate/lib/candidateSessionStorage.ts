@@ -1,6 +1,7 @@
 type CandidateSession = {
   submissionId: string;
   candidateSessionToken: string;
+  mcqSectionSubmitted?: boolean;
   mcqAnswers?: Array<{ questionIndex: number; selectedOptionIndex: number }>;
   sectionAnswers?: Array<{
     sectionKey:
@@ -13,6 +14,11 @@ type CandidateSession = {
       | "test_case";
     itemIndex: number;
     answer: string;
+  }>;
+  codingAnswers?: Array<{
+    taskIndex: number;
+    code: string;
+    language: string;
   }>;
   test: {
     id: string;
@@ -72,6 +78,8 @@ type CandidateSession = {
 
 const CANDIDATE_SESSION_KEY = "candidate_test_session";
 const CANDIDATE_RESULT_KEY = "candidate_test_result";
+const CANDIDATE_SESSION_EVENT = "candidate-session-updated";
+const CANDIDATE_RESULT_EVENT = "candidate-result-updated";
 
 type CandidateTestResultSummary = {
   submissionId?: string;
@@ -88,6 +96,7 @@ type CandidateTestResultSummary = {
 export function saveCandidateSession(session: CandidateSession) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CANDIDATE_SESSION_KEY, JSON.stringify(session));
+  window.dispatchEvent(new CustomEvent(CANDIDATE_SESSION_EVENT));
 }
 
 export function readCandidateSession(): CandidateSession | null {
@@ -104,11 +113,13 @@ export function readCandidateSession(): CandidateSession | null {
 export function clearCandidateSession() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(CANDIDATE_SESSION_KEY);
+  window.dispatchEvent(new CustomEvent(CANDIDATE_SESSION_EVENT));
 }
 
 export function saveCandidateResultSummary(result: CandidateTestResultSummary) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CANDIDATE_RESULT_KEY, JSON.stringify(result));
+  window.dispatchEvent(new CustomEvent(CANDIDATE_RESULT_EVENT));
 }
 
 export function readCandidateResultSummary(): CandidateTestResultSummary | null {
@@ -125,6 +136,13 @@ export function readCandidateResultSummary(): CandidateTestResultSummary | null 
 export function clearCandidateResultSummary() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(CANDIDATE_RESULT_KEY);
+  window.dispatchEvent(new CustomEvent(CANDIDATE_RESULT_EVENT));
 }
 
+export {
+  CANDIDATE_SESSION_KEY,
+  CANDIDATE_RESULT_KEY,
+  CANDIDATE_SESSION_EVENT,
+  CANDIDATE_RESULT_EVENT,
+};
 export type { CandidateSession, CandidateTestResultSummary };

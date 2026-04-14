@@ -14,17 +14,43 @@ const SUPPORTED_SECTION_KEYS = [
 type SupportedSectionKey = (typeof SUPPORTED_SECTION_KEYS)[number];
 
 function normalizeSections(input?: string[]): SupportedSectionKey[] {
-  if (!Array.isArray(input) || input.length === 0) {
-    return ["mcq", "coding"];
-  }
+  if (!Array.isArray(input) || input.length === 0) return [];
   const normalized = input
     .map((value) => String(value || "").trim().toLowerCase())
     .filter((value): value is SupportedSectionKey => SUPPORTED_SECTION_KEYS.includes(value as SupportedSectionKey));
-  return normalized.length > 0 ? Array.from(new Set(normalized)) : [];
+  return Array.from(new Set(normalized));
+}
+
+function applyRoleSectionPolicy(
+  roleCategory: CandidateSession["test"]["roleCategory"] | undefined,
+  sections: SupportedSectionKey[]
+): SupportedSectionKey[] {
+  if (roleCategory === "frontend") {
+    // Frontend role flow is fixed: MCQ + UI Preview only.
+    const allowed: SupportedSectionKey[] = ["mcq", "ui_preview"];
+    return allowed.filter((section) => sections.includes(section));
+  }
+  return sections;
 }
 
 export function getSupportedSections(session: CandidateSession | null): SupportedSectionKey[] {
-  return normalizeSections(session?.test?.enabledSections);
+  const explicitSections = normalizeSections(session?.test?.enabledSections);
+
+  const derivedSections: SupportedSectionKey[] = [];
+  if ((session?.test?.mcqQuestions || []).length > 0) derivedSections.push("mcq");
+  if ((session?.test?.codingTasks || []).length > 0) derivedSections.push("coding");
+
+  const sectionConfigKeys = (session?.test?.sectionConfigs || [])
+    .map((item) => String(item?.key || "").trim().toLowerCase())
+    .filter((value): value is SupportedSectionKey =>
+      SUPPORTED_SECTION_KEYS.includes(value as SupportedSectionKey)
+    );
+
+  const merged = Array.from(new Set([...explicitSections, ...derivedSections, ...sectionConfigKeys]));
+  const withRolePolicy = applyRoleSectionPolicy(session?.test?.roleCategory, merged);
+  if (withRolePolicy.length > 0) return withRolePolicy;
+  if (merged.length > 0) return merged;
+  return ["mcq", "coding"];
 }
 
 export function isMcqEnabled(session: CandidateSession | null): boolean {
