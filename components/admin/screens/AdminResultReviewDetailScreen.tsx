@@ -158,6 +158,48 @@ function parseUiPreviewPrompt(raw: string): string {
   }
 }
 
+type ParsedBugReportAnswer = {
+  answerText: string;
+  answerHtml: string;
+};
+
+function plainTextToEditorHtml(text: string): string {
+  const value = String(text || "").trim();
+  if (!value) return "<p></p>";
+  const escaped = value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  return escaped
+    .split("\n")
+    .map((line) => `<p>${line || "&nbsp;"}</p>`)
+    .join("");
+}
+
+function parseBugReportAnswer(raw: string): ParsedBugReportAnswer | null {
+  if (!raw?.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as { answerText?: string; answerHtml?: string; answer?: string };
+    if (parsed && (parsed.answerText || parsed.answerHtml || parsed.answer)) {
+      const answerText = String(parsed.answerText || parsed.answer || "").trim();
+      const answerHtml = String(parsed.answerHtml || "").trim();
+      return {
+        answerText,
+        answerHtml: answerHtml || plainTextToEditorHtml(answerText),
+      };
+    }
+  } catch {
+    // legacy plain answer
+  }
+  const answerText = String(raw || "").trim();
+  return {
+    answerText,
+    answerHtml: plainTextToEditorHtml(answerText),
+  };
+}
+
 function ScoreCard({
   value,
   label,
@@ -794,6 +836,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                     (item) => item.sectionKey === row.sectionKey && item.itemIndex === row.itemIndex
                   );
                   const parsedUiAnswer = row.sectionKey === "ui_preview" ? parseUiPreviewAnswer(row.answer || "") : null;
+                  const parsedBugAnswer = row.sectionKey === "bug_report" ? parseBugReportAnswer(row.answer || "") : null;
                   return (
                     <article
                       key={`${row.sectionKey}-${row.itemIndex}`}
@@ -808,7 +851,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                             Max: {row.maxMarks} marks
                           </p>
                         </div>
-                        {row.prompt ? (
+                        {row.prompt && row.sectionKey !== "bug_report" ? (
                           <p className={`mt-1 text-sm ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
                             {row.sectionKey === "ui_preview" ? parseUiPreviewPrompt(row.prompt) : row.prompt}
                           </p>
@@ -847,6 +890,15 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                                 </div>
                               )}
                             </div>
+                          ) : parsedBugAnswer ? (
+                            <div
+                              className={`bug-report-render rounded-[8px] border p-3 text-[14px] leading-6 ${
+                                isDark ? "border-slate-600 bg-slate-900 text-slate-100" : "border-[#d6dbe6] bg-white text-[#0f172a]"
+                              }`}
+                              dangerouslySetInnerHTML={{
+                                __html: parsedBugAnswer.answerHtml || plainTextToEditorHtml(parsedBugAnswer.answerText || "-"),
+                              }}
+                            />
                           ) : (
                             <pre className={`whitespace-pre-wrap text-[14px] leading-6 ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
                               {row.answer || "-"}

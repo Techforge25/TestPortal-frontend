@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { AdminFooter } from "@/components/admin/components/AdminFooter";
@@ -20,6 +21,7 @@ import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
 import {
   getAdminSecurityDefaults,
   saveAdminTest,
+  uploadAdminCkeditorImage,
   uploadAdminUiPreviewImage,
   uploadAdminUiTaskPdf,
 } from "@/components/admin/lib/backendApi";
@@ -28,6 +30,14 @@ import {
   readEditingTestDraft,
   type AdminTestListItem,
 } from "@/components/admin/lib/testListStorage";
+
+const  CKEditor = dynamic(
+  async () => {
+    const mod = await import("@ckeditor/ckeditor5-react");
+    return mod.CKEditor;
+  },
+  { ssr: false }
+);
 
 type McqQuestion = {
   id: number;
@@ -177,12 +187,18 @@ type DesignerUiTaskPromptPayload = {
   figmaReferenceLink: string;
 };
 
+type BugReportPromptPayload = {
+  websiteLink: string;
+  description: string;
+  descriptionHtml: string;
+};
+
 const rolePresetSections: Record<RoleCategory, string[]> = {
   developer: ["mcq", "coding"],
   frontend: ["mcq", "ui_preview"],
   designer: ["mcq", "portfolio_link"],
   video_editor: ["mcq", "scenario", "short_answer", "long_answer"],
-  qa_manual: ["mcq", "bug_report", "test_case", "short_answer"],
+  qa_manual: ["mcq", "bug_report"],
   hr: ["mcq", "scenario", "long_answer"],
   sales: ["mcq", "scenario", "long_answer"],
   other: ["mcq"],
@@ -206,7 +222,7 @@ const sectionDefaultPrompt: Record<NonCodingSectionKey, string> = {
     "Read the PDF requirement document and open the Figma reference link. Build your design based on those requirements.",
   short_answer: "Write a short answer question.",
   long_answer: "Write a long answer question.",
-  bug_report: "Write a bug report analysis question.",
+  bug_report: "",
   test_case: "Write a test case design question.",
 };
 
@@ -266,6 +282,101 @@ function buildDesignerUiTaskPrompt(value: DesignerUiTaskPromptPayload): string {
     pdfFileName: String(value.pdfFileName || ""),
     figmaReferenceLink: String(value.figmaReferenceLink || ""),
   });
+}
+
+function parseBugReportPrompt(raw: string): BugReportPromptPayload {
+  if (!raw?.trim()) {
+    return {
+      websiteLink: "",
+      description: "",
+      descriptionHtml: "<p></p>",
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<BugReportPromptPayload> & { descriptionText?: string };
+    if (parsed && (parsed.websiteLink || parsed.description || parsed.descriptionHtml || parsed.descriptionText)) {
+      const htmlFromPayload = String(parsed.descriptionHtml || "");
+      const textFromPayload = String(parsed.description || parsed.descriptionText || "");
+      const normalizedHtml = htmlFromPayload.trim()
+        ? htmlFromPayload
+        : plainTextToEditorHtml(textFromPayload);
+      const normalizedText = textFromPayload.trim()
+        ? textFromPayload
+        : editorHtmlToPlainText(normalizedHtml);
+      return {
+        websiteLink: String(parsed.websiteLink || ""),
+        description: normalizedText,
+        descriptionHtml: normalizedHtml,
+      };
+    }
+  } catch {
+    // Fall back to text parser below.
+  }
+
+  const websiteMatch = raw.match(/^\s*website\s*link\s*:\s*([^\r\n]*)/im);
+  const descriptionMatch = raw.match(/^\s*description\s*:\s*([\s\S]*)$/im);
+  if (websiteMatch || descriptionMatch) {
+    const plain = (descriptionMatch?.[1] || "").trim();
+    return {
+      websiteLink: (websiteMatch?.[1] || "").trim(),
+      description: plain,
+      descriptionHtml: plainTextToEditorHtml(plain),
+    };
+  }
+
+  return {
+    websiteLink: "",
+    description: raw.trim(),
+    descriptionHtml: plainTextToEditorHtml(raw.trim()),
+  };
+}
+
+function buildBugReportPrompt(value: BugReportPromptPayload): string {
+  const descriptionHtml = String(value.descriptionHtml || "").trim();
+  const descriptionText = String(value.description || "").trim();
+  const normalizedHtml = descriptionHtml || plainTextToEditorHtml(descriptionText);
+  const normalizedText = descriptionText || editorHtmlToPlainText(normalizedHtml);
+  return JSON.stringify({
+    websiteLink: String(value.websiteLink || "").trim(),
+    descriptionHtml: normalizedHtml,
+    descriptionText: normalizedText,
+  });
+}
+
+function editorHtmlToPlainText(html: string): string {
+  if (!html) return "";
+  if (typeof window === "undefined") {
+    return html
+      .replace(/<\/(p|div|li|h1|h2|h3|h4|h5|h6)>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
+  }
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  return container.innerText
+    .replace(/\u00a0/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+function plainTextToEditorHtml(text: string): string {
+  const value = String(text || "").trim();
+  if (!value) return "<p></p>";
+  const escaped = value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  return escaped
+    .split("\n")
+    .map((line) => `<p>${line || "&nbsp;"}</p>`)
+    .join("");
 }
 
 const ADMIN_SECURITY_LOCAL_KEY = "admin_security_defaults_local_v1";
@@ -560,6 +671,28 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
   const [copied, setCopied] = useState(false);
   const [publishError, setPublishError] = useState("");
   const [basicInfoErrors, setBasicInfoErrors] = useState<BasicInfoErrors>({});
+  const [editorConstructor, setEditorConstructor] = useState<unknown>(null);
+  const [editorConfig, setEditorConfig] = useState<Record<string, unknown>>({
+    toolbar: [
+      "undo",
+      "redo",
+      "|",
+      "bold",
+      "italic",
+      "link",
+      "|",
+      "bulletedList",
+      "numberedList",
+      "insertTable",
+      "|",
+      "blockQuote",
+    ],
+    placeholder: "Write a bug report analysis question.",
+  });
+  const bugReportDescriptionHtmlDraftRef = useRef<Record<string, string>>({});
+  const bugReportWebsiteDraftRef = useRef<Record<string, string>>({});
+  const [bugReportImageUploadingByKey, setBugReportImageUploadingByKey] = useState<Record<string, boolean>>({});
+  const [bugReportImageUploadErrorByKey, setBugReportImageUploadErrorByKey] = useState<Record<string, string>>({});
   const [uiPreviewUploadErrors, setUiPreviewUploadErrors] = useState<Record<string, string>>({});
   const [uiPreviewUploading, setUiPreviewUploading] = useState<Record<string, boolean>>({});
   const [designerUiTaskUploadErrors, setDesignerUiTaskUploadErrors] = useState<Record<string, string>>({});
@@ -578,6 +711,14 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     return getSectionLabel(sectionKey);
   };
   const isFrontendRole = roleCategory === "frontend";
+  const isQaManualRole = roleCategory === "qa_manual";
+  const stepThreeLabel = codingSectionEnabled
+    ? "Coding Tasks"
+    : isQaManualRole
+      ? "Bug Report"
+      : roleCategory === "designer"
+        ? "UI Task"
+        : "Assessment";
   const maxStep = 5;
   const frontendStepperSteps: Array<{ id: CreateTestStep; label: string }> = [
     { id: 1, label: "Basic Info" },
@@ -586,6 +727,127 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     { id: 4, label: "Security" },
     { id: 5, label: "Publish" },
   ];
+
+  useEffect(() => {
+    let mounted = true;
+    const stableConfig = {
+      toolbar: [
+        "undo",
+        "redo",
+        "|",
+        "bold",
+        "italic",
+        "link",
+        "|",
+        "bulletedList",
+        "numberedList",
+        "insertTable",
+        "|",
+        "blockQuote",
+        "|",
+        "uploadImage",
+      ],
+      placeholder: "Write a bug report analysis question.",
+      image: {
+        toolbar: [
+          "imageTextAlternative",
+          "|",
+          "imageStyle:inline",
+          "imageStyle:block",
+          "imageStyle:side",
+          "|",
+          "resizeImage:25",
+          "resizeImage:50",
+          "resizeImage:75",
+          "resizeImage:original",
+        ],
+        resizeOptions: [
+          {
+            name: "resizeImage:original",
+            value: null,
+            label: "Original",
+          },
+          {
+            name: "resizeImage:25",
+            value: "25",
+            label: "25%",
+          },
+          {
+            name: "resizeImage:50",
+            value: "50",
+            label: "50%",
+          },
+          {
+            name: "resizeImage:75",
+            value: "75",
+            label: "75%",
+          },
+        ],
+      },
+    };
+
+    void import("@ckeditor/ckeditor5-build-classic")
+      .then((mod) => {
+        if (!mounted) return;
+        const runtime = mod as unknown as { default?: { default?: unknown } | unknown };
+        const editor = runtime.default && typeof runtime.default === "object" && "default" in runtime.default
+          ? (runtime.default as { default?: unknown }).default
+          : runtime.default ?? mod;
+        const editorCtor = editor as { create?: unknown };
+        const hasCreate =
+          editor && typeof editor === "function" && typeof editorCtor.create === "function";
+        setEditorConstructor(() => (hasCreate ? editor : null));
+        setEditorConfig(stableConfig);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setEditorConstructor(null);
+        setEditorConfig(stableConfig);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const uploadCkeditorImage = async (file: File) => {
+    const activeToken = getAdminToken();
+    if (!activeToken) {
+      throw new Error("Admin session missing. Please login again and retry.");
+    }
+    if (!file.type.startsWith("image/")) {
+      throw new Error("Only image files are allowed.");
+    }
+    if (file.size > 2_000_000) {
+      throw new Error("Image is too large. Use image up to 2MB.");
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    const uploaded = await uploadAdminCkeditorImage(activeToken, {
+      dataUrl,
+      fileName: file.name,
+    });
+    if (!/^https?:\/\//i.test(String(uploaded.url || ""))) {
+      throw new Error("Invalid image URL returned by upload service.");
+    }
+    return uploaded.url;
+  };
+
+  const formatCkeditorUploadError = (error: unknown): string => {
+    const raw = error instanceof Error ? error.message : "Failed to upload image.";
+    const lower = raw.toLowerCase();
+    if (lower.includes("route not found")) {
+      return "Image upload endpoint not found on backend. Restart/deploy latest backend.";
+    }
+    if (lower.includes("session missing") || lower.includes("unauthorized")) {
+      return "Session expired. Login again and retry upload.";
+    }
+    if (lower.includes("too large")) {
+      return "Image size exceeded. Please use image up to 2MB.";
+    }
+    if (lower.includes("only image")) {
+      return "Only JPG, PNG, WebP image files are supported.";
+    }
+    return raw;
+  };
 
   useEffect(() => {
     if (step > maxStep) setStep(maxStep as CreateTestStep);
@@ -824,22 +1086,46 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     : sectionOptions.filter((section) => section.key !== "ui_preview");
 
   const sectionConfigsPayload = nonCodingEnabledSections.flatMap((sectionKey) =>
-    (sectionPrompts[sectionKey] || []).map((item) => ({
-      key: sectionKey,
-      title: getSectionLabelForRole(sectionKey),
-      prompt:
-        sectionKey === "ui_preview"
-          ? buildUiPreviewPrompt(parseUiPreviewPrompt(item.value || ""))
-          : roleCategory === "designer" && sectionKey === "portfolio_link"
-            ? buildDesignerUiTaskPrompt(parseDesignerUiTaskPrompt(item.value || ""))
-          : item.value?.trim() || sectionDefaultPrompt[sectionKey],
-      instructions: "",
-      required: true,
-      marks:
-        sectionKey === "ui_preview"
-          ? Number.parseInt(item.marks || "10", 10) || 10
-          : 1,
-    }))
+    (sectionPrompts[sectionKey] || []).map((item) => {
+      if (sectionKey === "bug_report") {
+        const parsed = parseBugReportPrompt(item.value || "");
+        const draftKey = `${sectionKey}-${item.id}`;
+        const draftWebsite = (bugReportWebsiteDraftRef.current[draftKey] || "").trim();
+        const draftHtml = (bugReportDescriptionHtmlDraftRef.current[draftKey] || "").trim();
+        const normalizedHtml = draftHtml || parsed.descriptionHtml || plainTextToEditorHtml(parsed.description);
+        const normalizedText = editorHtmlToPlainText(normalizedHtml).slice(0, 5000);
+
+        return {
+          key: sectionKey,
+          title: getSectionLabelForRole(sectionKey),
+          prompt: buildBugReportPrompt({
+            websiteLink: draftWebsite || parsed.websiteLink,
+            description: normalizedText,
+            descriptionHtml: normalizedHtml,
+          }),
+          instructions: "",
+          required: true,
+          marks: 1,
+        };
+      }
+
+      return {
+        key: sectionKey,
+        title: getSectionLabelForRole(sectionKey),
+        prompt:
+          sectionKey === "ui_preview"
+            ? buildUiPreviewPrompt(parseUiPreviewPrompt(item.value || ""))
+            : roleCategory === "designer" && sectionKey === "portfolio_link"
+              ? buildDesignerUiTaskPrompt(parseDesignerUiTaskPrompt(item.value || ""))
+            : item.value?.trim() || sectionDefaultPrompt[sectionKey],
+        instructions: "",
+        required: true,
+        marks:
+          sectionKey === "ui_preview"
+            ? Number.parseInt(item.marks || "10", 10) || 10
+            : 1,
+      };
+    })
   );
 
   const upsertSectionPrompt = (section: NonCodingSectionKey, id: number, value: string) => {
@@ -876,6 +1162,16 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
       }));
       return { ...prev, [section]: normalized };
     });
+    Object.keys(bugReportDescriptionHtmlDraftRef.current).forEach((key) => {
+      if (key.startsWith(`${section}-`)) {
+        delete bugReportDescriptionHtmlDraftRef.current[key];
+      }
+    });
+    Object.keys(bugReportWebsiteDraftRef.current).forEach((key) => {
+      if (key.startsWith(`${section}-`)) {
+        delete bugReportWebsiteDraftRef.current[key];
+      }
+    });
     setUiPreviewUploadErrors((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
     );
@@ -883,6 +1179,12 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
       Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
     );
     setDesignerUiTaskUploadErrors((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
+    );
+    setBugReportImageUploadingByKey((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
+    );
+    setBugReportImageUploadErrorByKey((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${section}-`)))
     );
   };
@@ -1215,13 +1517,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
               currentStep={step}
               isDark={isDark}
               includeCodingStep={!isFrontendRole}
-              stepThreeLabel={
-                codingSectionEnabled
-                  ? "Coding Tasks"
-                  : roleCategory === "designer"
-                    ? "UI Task"
-                    : "Assessment"
-              }
+              stepThreeLabel={stepThreeLabel}
               customSteps={isFrontendRole ? frontendStepperSteps : undefined}
             />
 
@@ -1652,6 +1948,8 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                   title={
                     isFrontendRole
                       ? "UI Preview Task"
+                      : isQaManualRole
+                        ? "Bug Report"
                       : roleCategory === "designer"
                         ? "UI Task"
                         : "Assessment Sections"
@@ -1677,6 +1975,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                         const sectionKey = section as NonCodingSectionKey;
                         const items = sectionPrompts[sectionKey] || [];
                         const isPortfolio = sectionKey === "portfolio_link";
+                        const isBugReport = sectionKey === "bug_report";
                         const isLong =
                           sectionKey === "scenario" ||
                           sectionKey === "long_answer" ||
@@ -1695,13 +1994,15 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                               >
                                 {getSectionLabelForRole(sectionKey)}
                               </span>
-                              <AppButton
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => addSectionPrompt(sectionKey)}
-                              >
-                                Add
-                              </AppButton>
+                              {!isBugReport ? (
+                                <AppButton
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => addSectionPrompt(sectionKey)}
+                                >
+                                  Add
+                                </AppButton>
+                              ) : null}
                             </div>
 
                             <div className="space-y-2">
@@ -1919,6 +2220,195 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                                         );
                                       })()}
                                     </div>
+                                  ) : sectionKey === "bug_report" ? (
+                                    <div
+                                      className={`w-full space-y-3 rounded-[12px] p-3 ${
+                                        isDark ? "bg-slate-900/70" : "bg-[#f8fafc]"
+                                      }`}
+                                    >
+                                      {(() => {
+                                        const parsed = parseBugReportPrompt(item.value || "");
+                                        const bugEditorKey = `${sectionKey}-${item.id}`;
+                                        const bugUploadError = bugReportImageUploadErrorByKey[bugEditorKey] || "";
+                                        const bugUploading = Boolean(bugReportImageUploadingByKey[bugEditorKey]);
+                                        const draftWebsite = bugReportWebsiteDraftRef.current[bugEditorKey] ?? parsed.websiteLink;
+                                        const draftDescriptionHtml =
+                                          bugReportDescriptionHtmlDraftRef.current[bugEditorKey] ??
+                                          (parsed.descriptionHtml?.trim()
+                                            ? parsed.descriptionHtml
+                                            : plainTextToEditorHtml(parsed.description));
+                                        return (
+                                          <>
+                                            <input
+                                              key={`${bugEditorKey}-${parsed.websiteLink}`}
+                                              type="url"
+                                              defaultValue={draftWebsite}
+                                              onChange={(event) => {
+                                                bugReportWebsiteDraftRef.current[bugEditorKey] = event.target.value || "";
+                                              }}
+                                              onBlur={(event) => {
+                                                const raw = event.currentTarget.value ?? "";
+                                                const trimmed = raw.trim();
+                                                const normalized =
+                                                  trimmed && !/^https?:\/\//i.test(trimmed) ? `https://${trimmed}` : trimmed;
+                                                bugReportWebsiteDraftRef.current[bugEditorKey] = normalized;
+                                                if (normalized === parsed.websiteLink) return;
+                                                upsertSectionPrompt(
+                                                  sectionKey,
+                                                  item.id,
+                                                  buildBugReportPrompt({
+                                                    ...parsed,
+                                                    websiteLink: normalized,
+                                                    descriptionHtml: draftDescriptionHtml,
+                                                  })
+                                                );
+                                              }}
+                                              className={`h-[48px] w-full rounded-[8px] border px-3 text-[15px] outline-none placeholder:text-[#98a2b3] ${
+                                                isDark
+                                                  ? "border-transparent bg-slate-800 text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-slate-500"
+                                                  : "border-transparent bg-white text-[#0f172a] shadow-[inset_0_0_0_1px_#e2e8f0] focus:ring-2 focus:ring-[#1f3a8a33]"
+                                              }`}
+                                              placeholder="Website link (e.g., https://example.com)"
+                                            />
+                                            <textarea
+                                              style={{ display: "none" }}
+                                              value={parsed.description}
+                                              readOnly
+                                              aria-hidden="true"
+                                            />
+                                            <div
+                                              className={`qa-bug-ckeditor w-full rounded-[10px] border ${
+                                                isDark ? "is-dark border-transparent bg-slate-800" : "border-transparent bg-white"
+                                              }`}
+                                            >
+                                              <p className={`mb-2 px-3 pt-3 text-base font-semibold ${isDark ? "text-slate-200" : "text-[#1e293b]"}`}>
+                                                Description
+                                              </p>
+                                              {editorConstructor ? (
+                                                <CKEditor
+                                                  editor={editorConstructor as never}
+                                                  key={bugEditorKey}
+                                                  data={draftDescriptionHtml}
+                                                  config={{
+                                                    ...editorConfig,
+                                                  }}
+                                                  onReady={(editor) => {
+                                                    try {
+                                                      type Loader = { file: Promise<File> };
+                                                      type UploadAdapter = {
+                                                        upload: () => Promise<{ default: string }>;
+                                                        abort: () => void;
+                                                      };
+                                                      type FileRepositoryPlugin = {
+                                                        createUploadAdapter?: (loader: Loader) => UploadAdapter;
+                                                      };
+                                                      const fileRepository = (
+                                                        editor as unknown as {
+                                                          plugins: { get: (name: string) => FileRepositoryPlugin };
+                                                        }
+                                                      ).plugins.get("FileRepository");
+                                                      if (!fileRepository) return;
+                                                      fileRepository.createUploadAdapter = (loader: Loader) => ({
+                                                        upload: async () => {
+                                                          setBugReportImageUploadErrorByKey((prev) => {
+                                                            const next = { ...prev };
+                                                            delete next[bugEditorKey];
+                                                            return next;
+                                                          });
+                                                          setBugReportImageUploadingByKey((prev) => ({ ...prev, [bugEditorKey]: true }));
+                                                          try {
+                                                            const file = await loader.file;
+                                                            const url = await uploadCkeditorImage(file);
+                                                            return { default: url };
+                                                          } catch (error) {
+                                                            const message = formatCkeditorUploadError(error);
+                                                            setBugReportImageUploadErrorByKey((prev) => ({
+                                                              ...prev,
+                                                              [bugEditorKey]: message,
+                                                            }));
+                                                            throw error;
+                                                          } finally {
+                                                            setBugReportImageUploadingByKey((prev) => {
+                                                              const next = { ...prev };
+                                                              delete next[bugEditorKey];
+                                                              return next;
+                                                            });
+                                                          }
+                                                        },
+                                                        abort: () => {},
+                                                      });
+                                                    } catch {
+                                                      // Keep editor usable even if upload adapter cannot bind.
+                                                    }
+                                                  }}
+                                                  onChange={(_event, editor) => {
+                                                    const rawHtml = editor.getData();
+                                                    const plain = editorHtmlToPlainText(rawHtml);
+                                                    if (plain.length > 5000) {
+                                                      const clipped = plain.slice(0, 5000);
+                                                      const clippedHtml = plainTextToEditorHtml(clipped);
+                                                      bugReportDescriptionHtmlDraftRef.current[bugEditorKey] = clippedHtml;
+                                                      editor.setData(clippedHtml);
+                                                      return;
+                                                    }
+                                                    bugReportDescriptionHtmlDraftRef.current[bugEditorKey] = rawHtml;
+                                                  }}
+                                                  onBlur={() => {
+                                                    const draftHtml = bugReportDescriptionHtmlDraftRef.current[bugEditorKey];
+                                                    if (typeof draftHtml !== "string") return;
+                                                    const draftPlain = editorHtmlToPlainText(draftHtml).slice(0, 5000);
+                                                    if (draftPlain === parsed.description) return;
+                                                    upsertSectionPrompt(
+                                                      sectionKey,
+                                                      item.id,
+                                                      buildBugReportPrompt({
+                                                        ...parsed,
+                                                        description: draftPlain,
+                                                        descriptionHtml: draftHtml,
+                                                      })
+                                                    );
+                                                  }}
+                                                />
+                                              ) : (
+                                                <textarea
+                                                  value={parsed.description}
+                                                  onChange={(event) =>
+                                                    upsertSectionPrompt(
+                                                      sectionKey,
+                                                      item.id,
+                                                      buildBugReportPrompt({
+                                                        ...parsed,
+                                                        description: event.target.value.slice(0, 5000),
+                                                        descriptionHtml: plainTextToEditorHtml(event.target.value.slice(0, 5000)),
+                                                      })
+                                                    )
+                                                  }
+                                                  maxLength={5000}
+                                                  className={`h-[96px] w-full resize-none rounded-[8px] border px-3 py-3 text-[16px] outline-none placeholder:text-[#98a2b3] ${
+                                                    isDark
+                                                      ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-400"
+                                                      : "border-[#dbe3ef] bg-white text-[#0f172a]"
+                                                  }`}
+                                                  style={{ minHeight: 230 }}
+                                                  placeholder="Write a bug report analysis question."
+                                                />
+                                              )}
+                                              <p className={`px-3 text-[11px] ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>
+                                                Max 5000 characters.
+                                              </p>
+                                              {bugUploading ? (
+                                                <p className={`px-3 pb-2 text-[12px] ${isDark ? "text-slate-300" : "text-[#1f3a8a]"}`}>
+                                                  Uploading image...
+                                                </p>
+                                              ) : null}
+                                              {bugUploadError ? (
+                                                <p className="px-3 pb-2 text-[12px] text-red-600">{bugUploadError}</p>
+                                              ) : null}
+                                            </div>
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
                                   ) : isLong ? (
                                     <textarea
                                       value={item.value}
@@ -1952,14 +2442,16 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                                       />
                                     </div>
                                   ) : null}
-                                  <button
-                                    type="button"
-                                    onClick={() => deleteSectionPrompt(sectionKey, item.id)}
-                                    aria-label={`Delete ${getSectionLabelForRole(sectionKey)} item ${item.id}`}
-                                    className="mt-2 shrink-0"
-                                  >
-                                    <TrashIcon />
-                                  </button>
+                                  {!isBugReport ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteSectionPrompt(sectionKey, item.id)}
+                                      aria-label={`Delete ${getSectionLabelForRole(sectionKey)} item ${item.id}`}
+                                      className="mt-2 shrink-0"
+                                    >
+                                      <TrashIcon />
+                                    </button>
+                                  ) : null}
                                 </div>
                               ))}
                             </div>
@@ -2093,7 +2585,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                   ) : null}
                   {!codingSectionEnabled ? (
                     <CreateTestSummaryField
-                      label="Assessment Sections"
+                      label={isQaManualRole ? "Bug Report Sections" : "Assessment Sections"}
                       value={
                         enabledSections
                           .filter((section) => section !== "mcq")
@@ -2193,4 +2685,3 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     </main>
   );
 }
-

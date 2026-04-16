@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
-import { saveCandidateDraft, submitCandidateTest } from "@/components/admin/lib/backendApi";
+import {
+  saveCandidateDraft,
+  submitCandidateTest,
+  uploadCandidateCkeditorImage,
+} from "@/components/admin/lib/backendApi";
 import { usePublicBranding } from "@/components/admin/lib/runtimeSettings";
 import { useCandidateRealtimeState } from "@/components/candidate/hooks/useCandidateRealtimeState";
 import {
@@ -25,6 +30,14 @@ import {
   hasAssessmentSections,
   hasUiPreviewSections,
 } from "@/components/candidate/lib/assessmentFlow";
+
+const CKEditor = dynamic(
+  async () => {
+    const mod = await import("@ckeditor/ckeditor5-react");
+    return mod.CKEditor;
+  },
+  { ssr: false }
+);
 
 type SectionConfig = {
   index: number;
@@ -156,6 +169,153 @@ function parseUiPreviewPrompt(section: SectionConfig): { taskPrompt: string; ref
   }
 }
 
+function parseBugReportPrompt(raw: string): { websiteLink: string; description: string; descriptionHtml: string } {
+  if (!raw?.trim()) return { websiteLink: "", description: "", descriptionHtml: "<p></p>" };
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      websiteLink?: string;
+      descriptionHtml?: string;
+      descriptionText?: string;
+      description?: string;
+    };
+    if (parsed && (parsed.websiteLink || parsed.descriptionHtml || parsed.descriptionText || parsed.description)) {
+      const descriptionHtml = String(parsed.descriptionHtml || "").trim();
+      const description =
+        String(parsed.descriptionText || parsed.description || "").trim() ||
+        editorHtmlToPlainText(descriptionHtml);
+      return {
+        websiteLink: String(parsed.websiteLink || "").trim(),
+        description,
+        descriptionHtml: descriptionHtml || plainTextToEditorHtml(description),
+      };
+    }
+  } catch {
+    // fallback below
+  }
+
+  const websiteMatch = raw.match(/^\s*website\s*link\s*:\s*([^\r\n]*)/im);
+  const descriptionMatch = raw.match(/^\s*description\s*:\s*([\s\S]*)$/im);
+  if (websiteMatch || descriptionMatch) {
+    const description = (descriptionMatch?.[1] || "").trim();
+    return {
+      websiteLink: (websiteMatch?.[1] || "").trim(),
+      description,
+      descriptionHtml: plainTextToEditorHtml(description),
+    };
+  }
+
+  const fallback = raw.trim();
+  return {
+    websiteLink: "",
+    description: fallback,
+    descriptionHtml: plainTextToEditorHtml(fallback),
+  };
+}
+
+type ParsedBugReportAnswer = {
+  answerText: string;
+  answerHtml: string;
+};
+
+function parseBugReportAnswer(raw: string): ParsedBugReportAnswer {
+  const fallbackText = String(raw || "").trim();
+  if (!fallbackText) return { answerText: "", answerHtml: "<p></p>" };
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      answerText?: string;
+      answerHtml?: string;
+      answer?: string;
+    };
+    if (parsed && (parsed.answerText || parsed.answerHtml || parsed.answer)) {
+      const answerHtml = String(parsed.answerHtml || "").trim();
+      const answerText =
+        String(parsed.answerText || parsed.answer || "").trim() ||
+        editorHtmlToPlainText(answerHtml);
+      return {
+        answerText,
+        answerHtml: answerHtml || plainTextToEditorHtml(answerText),
+      };
+    }
+  } catch {
+    // treat as legacy plain text
+  }
+
+  return {
+    answerText: fallbackText,
+    answerHtml: plainTextToEditorHtml(fallbackText),
+  };
+}
+
+function serializeBugReportAnswer(answerText: string, answerHtml: string): string {
+  const normalizedText = String(answerText || "").trim().slice(0, 5000);
+  const normalizedHtml = String(answerHtml || "").trim() || plainTextToEditorHtml(normalizedText);
+  return JSON.stringify({
+    answerText: normalizedText,
+    answerHtml: normalizedHtml,
+  });
+}
+
+function hasSectionAnswerValue(sectionKey: SectionConfig["key"], raw: string | undefined): boolean {
+  if (sectionKey === "bug_report") {
+    return parseBugReportAnswer(String(raw || "")).answerText.trim().length > 0;
+  }
+  return String(raw || "").trim().length > 0;
+}
+
+function normalizeSectionAnswerForSave(sectionKey: SectionConfig["key"], raw: string | undefined): string {
+  if (sectionKey === "bug_report") {
+    const parsed = parseBugReportAnswer(String(raw || ""));
+    return serializeBugReportAnswer(parsed.answerText, parsed.answerHtml);
+  }
+  return String(raw || "");
+}
+
+function editorHtmlToPlainText(html: string): string {
+  if (!html) return "";
+  if (typeof window === "undefined") {
+    return html
+      .replace(/<\/(p|div|li|h1|h2|h3|h4|h5|h6)>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
+  }
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  return container.innerText
+    .replace(/\u00a0/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+function plainTextToEditorHtml(text: string): string {
+  const value = String(text || "").trim();
+  if (!value) return "<p></p>";
+  const escaped = value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  return escaped
+    .split("\n")
+    .map((line) => `<p>${line || "&nbsp;"}</p>`)
+    .join("");
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 type CandidateAssessmentSectionScreenProps = {
   mode?: "assessment" | "ui_preview";
 };
@@ -164,10 +324,69 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
   const router = useRouter();
   const branding = usePublicBranding();
   const [isHydrated, setIsHydrated] = useState(false);
+  const [editorConstructor, setEditorConstructor] = useState<unknown>(null);
+  const bugReportAnswerHtmlDraftRef = useRef<Record<number, string>>({});
+  const [bugReportImageUploadingBySection, setBugReportImageUploadingBySection] = useState<Record<number, boolean>>({});
+  const [bugReportImageUploadErrorBySection, setBugReportImageUploadErrorBySection] = useState<Record<number, string>>({});
   const { session } = useCandidateRealtimeState();
+
+  const uploadCkeditorImage = async (file: File) => {
+    if (!session?.submissionId || !session?.candidateSessionToken) {
+      throw new Error("Candidate session missing. Please login again.");
+    }
+    if (!file.type.startsWith("image/")) {
+      throw new Error("Only image files are allowed.");
+    }
+    if (file.size > 2_000_000) {
+      throw new Error("Image is too large. Use image up to 2MB.");
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    const uploaded = await uploadCandidateCkeditorImage({
+      submissionId: session.submissionId,
+      candidateSessionToken: session.candidateSessionToken,
+      dataUrl,
+      fileName: file.name,
+    });
+    if (!/^https?:\/\//i.test(String(uploaded.url || ""))) {
+      throw new Error("Invalid image URL returned by upload service.");
+    }
+    return uploaded.url;
+  };
+
+  const formatCkeditorUploadError = (error: unknown): string => {
+    const raw = error instanceof Error ? error.message : "Failed to upload image.";
+    const lower = raw.toLowerCase();
+    if (lower.includes("route not found")) {
+      return "Image upload endpoint not found. Please refresh and retry.";
+    }
+    if (lower.includes("session missing") || lower.includes("unauthorized")) {
+      return "Session expired. Please login again.";
+    }
+    if (lower.includes("too large")) {
+      return "Image is too large. Max size is 2MB.";
+    }
+    if (lower.includes("only image")) {
+      return "Only JPG, PNG, WebP image files are supported.";
+    }
+    return raw;
+  };
 
   useEffect(() => {
     setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    void import("@ckeditor/ckeditor5-build-classic")
+      .then((mod) => {
+        if (mounted) setEditorConstructor(() => mod.default);
+      })
+      .catch(() => {
+        if (mounted) setEditorConstructor(null);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const allConfigs = useMemo<SectionConfig[]>(() => {
@@ -260,7 +479,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
     const sectionAnswers = allConfigs.map((config) => ({
       sectionKey: config.key,
       itemIndex: config.index,
-      answer: String(answers[config.index] || ""),
+      answer: normalizeSectionAnswerForSave(config.key, answers[config.index]),
     }));
     const currentSerialized = JSON.stringify(session.sectionAnswers || []);
     const nextSerialized = JSON.stringify(sectionAnswers);
@@ -325,16 +544,23 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
     session?.test?.roleCategory === "designer" &&
     currentSections.length > 0 &&
     currentSections.every((section) => section.key === "portfolio_link");
+  const isQaManualBugReportPage =
+    mode === "assessment" &&
+    session?.test?.roleCategory === "qa_manual" &&
+    currentSections.length > 0 &&
+    currentSections.every((section) => section.key === "bug_report");
   const pageTitle =
     mode === "ui_preview"
       ? "UI Preview Task"
       : isDesignerUiTaskPage
         ? "UI Task"
+        : isQaManualBugReportPage
+          ? "Bug Report Task"
         : "Assessment Questions";
 
   const effectiveSecurity = useMemo(() => {
     const base = session?.test?.security || {};
-    if (!isDesignerUiTaskPage) return base;
+    if (!isDesignerUiTaskPage && !isQaManualBugReportPage) return base;
     return {
       ...base,
       forceFullscreen: false,
@@ -344,7 +570,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       disableRightClick: false,
       detectDevTools: false,
     };
-  }, [isDesignerUiTaskPage, session?.test?.security]);
+  }, [isDesignerUiTaskPage, isQaManualBugReportPage, session?.test?.security]);
 
   const { deadlineAt, warningCount, warningPopup, dismissWarningPopup } = useCandidateSecurityGuard({
     submissionId: session?.submissionId || "",
@@ -357,7 +583,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       const sectionAnswers = allConfigs.map((config) => ({
         sectionKey: config.key,
         itemIndex: config.index,
-        answer: answers[config.index] || "",
+        answer: normalizeSectionAnswerForSave(config.key, answers[config.index]),
       }));
       const response = await submitCandidateTest({
         submissionId: session.submissionId,
@@ -430,7 +656,9 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
       return;
     }
     setError("");
-    const missing = configs.filter((cfg) => cfg.required !== false && !String(answers[cfg.index] || "").trim());
+    const missing = configs.filter(
+      (cfg) => cfg.required !== false && !hasSectionAnswerValue(cfg.key, answers[cfg.index])
+    );
     if (missing.length) {
       setError(`Please fill required fields: ${missing.map((m) => m.title).join(", ")}`);
       return;
@@ -439,7 +667,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
     const sectionAnswers = allConfigs.map((config) => ({
       sectionKey: config.key,
       itemIndex: config.index,
-      answer: String(answers[config.index] || ""),
+      answer: normalizeSectionAnswerForSave(config.key, answers[config.index]),
     }));
 
     try {
@@ -487,7 +715,9 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
   }
 
   function getMissingRequiredInSections(sections: SectionConfig[]) {
-    return sections.filter((section) => section.required !== false && !String(answers[section.index] || "").trim());
+    return sections.filter(
+      (section) => section.required !== false && !hasSectionAnswerValue(section.key, answers[section.index])
+    );
   }
 
   function handleNextSection() {
@@ -558,7 +788,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
               >
                 <CandidateCountdown deadlineAt={deadlineAt} className="text-[16px] font-semibold text-[#0f172a]" />
               </div>
-              {!isDesignerUiTaskPage ? (
+              {!isDesignerUiTaskPage && !isQaManualBugReportPage ? (
                 <div className="flex h-[44px] items-center gap-2 rounded-[10px] border border-[#ffd8aa] bg-[#fff2e4] px-3">
                   <WarningIcon />
                   <p className="text-sm font-semibold text-[#d97706]">{warningCount} Warning{warningCount === 1 ? "" : "s"}</p>
@@ -591,7 +821,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                     <h2 className={`font-semibold text-[#0f172a] ${mode === "ui_preview" ? "text-[28px]" : "text-[24px]"}`}>
                       {section.index + 1}. {section.title}
                     </h2>
-                    {section.prompt ? (
+                    {section.prompt && section.key !== "bug_report" ? (
                       <p className={`mt-1 text-[#475569] ${mode === "ui_preview" ? "text-[15px]" : "text-sm"}`}>
                         {section.key === "ui_preview"
                           ? parseUiPreviewPrompt(section).taskPrompt
@@ -633,7 +863,181 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                         )}
                       </div>
                     ) : null}
-                    {section.key === "scenario" || section.key === "long_answer" || section.key === "bug_report" || section.key === "test_case" ? (
+                    {section.key === "bug_report" ? (
+                      <div className="mt-3 space-y-3">
+                        {(() => {
+                          const parsedBug = parseBugReportPrompt(section.prompt || "");
+                          const parsedBugAnswer = parseBugReportAnswer(answers[section.index] || "");
+                          const candidateAnswer = parsedBugAnswer.answerText;
+                          const editorHtml =
+                            bugReportAnswerHtmlDraftRef.current[section.index] ?? parsedBugAnswer.answerHtml;
+                          const bugUploading = Boolean(bugReportImageUploadingBySection[section.index]);
+                          const bugUploadError = bugReportImageUploadErrorBySection[section.index] || "";
+
+                          return (
+                            <>
+                              <div className="rounded-[10px] border border-[#e2e8f0] bg-[#f8fafc] p-3">
+                                <p className="text-[12px] font-semibold uppercase tracking-wide text-[#64748b]">Website Link</p>
+                                {parsedBug.websiteLink ? (
+                                  <a
+                                    href={parsedBug.websiteLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-1 inline-block break-all text-[15px] font-medium text-[#1f3a8a] underline underline-offset-2"
+                                  >
+                                    {parsedBug.websiteLink}
+                                  </a>
+                                ) : (
+                                  <p className="mt-1 text-[14px] text-[#64748b]">No website link provided.</p>
+                                )}
+                              </div>
+                              <div className="rounded-[10px] border border-[#e2e8f0] bg-[#f8fafc] p-3">
+                                <p className="text-[12px] font-semibold uppercase tracking-wide text-[#64748b]">Description</p>
+                                <div
+                                  className="bug-report-render mt-2 text-[14px] leading-6 text-[#334155]"
+                                  dangerouslySetInnerHTML={{
+                                    __html: parsedBug.descriptionHtml || plainTextToEditorHtml(parsedBug.description || "No description provided."),
+                                  }}
+                                />
+                              </div>
+                              <div className="qa-bug-ckeditor rounded-[10px] border border-[#dbe3ef] bg-white">
+                                <p className="mb-2 px-3 pt-3 text-base font-semibold text-[#1e293b]">Your Bug Report</p>
+                                {editorConstructor ? (
+                                  <CKEditor
+                                    editor={editorConstructor as never}
+                                    key={`candidate-bug-editor-${section.index}`}
+                                    data={editorHtml}
+                                    onChange={(_event, editor) => {
+                                      const draftHtml = editor.getData();
+                                      bugReportAnswerHtmlDraftRef.current[section.index] = draftHtml;
+                                      const draftPlain = editorHtmlToPlainText(draftHtml).slice(0, 5000);
+                                      setAnswers((prev) => ({
+                                        ...prev,
+                                        [section.index]: serializeBugReportAnswer(draftPlain, draftHtml),
+                                      }));
+                                    }}
+                                    onBlur={() => {
+                                      const draftHtml = bugReportAnswerHtmlDraftRef.current[section.index];
+                                      if (typeof draftHtml !== "string") return;
+                                      const draftPlain = editorHtmlToPlainText(draftHtml).slice(0, 5000);
+                                      setAnswers((prev) => ({
+                                        ...prev,
+                                        [section.index]: serializeBugReportAnswer(draftPlain, draftHtml),
+                                      }));
+                                    }}
+                                    config={{
+                                      placeholder: "Write your bug findings, reproduction steps, expected/actual behavior, and priority.",
+                                      toolbar: [
+                                        "undo",
+                                        "redo",
+                                        "|",
+                                        "bold",
+                                        "italic",
+                                        "bulletedList",
+                                        "numberedList",
+                                        "|",
+                                        "link",
+                                        "uploadImage",
+                                      ],
+                                      image: {
+                                        toolbar: [
+                                          "imageTextAlternative",
+                                          "|",
+                                          "imageStyle:inline",
+                                          "imageStyle:block",
+                                          "imageStyle:side",
+                                          "|",
+                                          "resizeImage:25",
+                                          "resizeImage:50",
+                                          "resizeImage:75",
+                                          "resizeImage:original",
+                                        ],
+                                        resizeOptions: [
+                                          { name: "resizeImage:original", value: null, label: "Original" },
+                                          { name: "resizeImage:25", value: "25", label: "25%" },
+                                          { name: "resizeImage:50", value: "50", label: "50%" },
+                                          { name: "resizeImage:75", value: "75", label: "75%" },
+                                        ],
+                                      },
+                                    }}
+                                    onReady={(editor) => {
+                                      try {
+                                        type Loader = { file: Promise<File> };
+                                        type UploadAdapter = {
+                                          upload: () => Promise<{ default: string }>;
+                                          abort: () => void;
+                                        };
+                                        type FileRepositoryPlugin = {
+                                          createUploadAdapter?: (loader: Loader) => UploadAdapter;
+                                        };
+                                        const fileRepository = (
+                                          editor as unknown as {
+                                            plugins: { get: (name: string) => FileRepositoryPlugin };
+                                          }
+                                        ).plugins.get("FileRepository");
+                                        if (!fileRepository) return;
+                                        fileRepository.createUploadAdapter = (loader: Loader) => ({
+                                          upload: async () => {
+                                            setBugReportImageUploadErrorBySection((prev) => {
+                                              const next = { ...prev };
+                                              delete next[section.index];
+                                              return next;
+                                            });
+                                            setBugReportImageUploadingBySection((prev) => ({ ...prev, [section.index]: true }));
+                                            try {
+                                              const file = await loader.file;
+                                              const url = await uploadCkeditorImage(file);
+                                              return { default: url };
+                                            } catch (error) {
+                                              const message = formatCkeditorUploadError(error);
+                                              setBugReportImageUploadErrorBySection((prev) => ({
+                                                ...prev,
+                                                [section.index]: message,
+                                              }));
+                                              throw error;
+                                            } finally {
+                                              setBugReportImageUploadingBySection((prev) => {
+                                                const next = { ...prev };
+                                                delete next[section.index];
+                                                return next;
+                                              });
+                                            }
+                                          },
+                                          abort: () => {},
+                                        });
+                                      } catch {
+                                        // Keep editor usable even if upload adapter cannot bind.
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  <textarea
+                                    value={candidateAnswer}
+                                    onChange={(event) => {
+                                      const nextText = event.target.value.slice(0, 5000);
+                                      setAnswers((prev) => ({
+                                        ...prev,
+                                        [section.index]: serializeBugReportAnswer(nextText, plainTextToEditorHtml(nextText)),
+                                      }));
+                                    }}
+                                    maxLength={5000}
+                                    className="h-[220px] w-full resize-none rounded-[8px] border border-[#dbe3ef] bg-white px-3 py-3 text-[15px] text-[#0f172a] outline-none placeholder:text-[#98a2b3] focus:border-[#1f3a8a]"
+                                    placeholder="Write your bug findings, reproduction steps, expected/actual behavior, and priority."
+                                  />
+                                )}
+                                <p className="px-3 py-3 text-[11px] text-[#64748b]">Max 5000 characters.</p>
+                                {bugUploading ? (
+                                  <p className="px-3 pb-2 text-[12px] text-[#1f3a8a]">Uploading image...</p>
+                                ) : null}
+                                {bugUploadError ? (
+                                  <p className="px-3 pb-2 text-[12px] text-red-600">{bugUploadError}</p>
+                                ) : null}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : section.key === "scenario" || section.key === "long_answer" || section.key === "test_case" ? (
                       <textarea
                         value={answers[section.index] || ""}
                         onChange={(event) => setAnswers((prev) => ({ ...prev, [section.index]: event.target.value }))}
@@ -704,7 +1108,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
         </article>
       </section>
 
-      {!isDesignerUiTaskPage && warningPopup ? (
+      {!isDesignerUiTaskPage && !isQaManualBugReportPage && warningPopup ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0f172a]/55 px-4">
           <div className="w-full max-w-[460px] rounded-[12px] border border-[#f5c172] bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.26)]">
             <div className="flex items-start gap-3">

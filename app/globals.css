@@ -26,3 +26,138 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* QA Manual Bug Report CKEditor theme */
+.qa-bug-ckeditor .ck.ck-editor {
+  border-radius: 10px;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.qa-bug-ckeditor .ck.ck-toolbar {
+  border: 0;
+  border-bottom: 1px solid #eef2f7;
+  border-radius: 0;
+  background: #ffffff;
+  padding: 8px 10px;
+  min-height: 44px;
+}
+
+.qa-bug-ckeditor .ck.ck-content {
+  border: 0;
+  min-height: 300px;
+  max-height: 500px;
+  overflow: auto;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #0f172a;
+  background: #ffffff;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-shadow: none !important;
+}
+
+.qa-bug-ckeditor .ck.ck-content p {
+  margin: 0 0 0.75rem;
+}
+
+.qa-bug-ckeditor .ck.ck-content ul,
+.qa-bug-ckeditor .ck.ck-content ol {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.5rem;
+}
+
+.qa-bug-ckeditor .ck.ck-content li {
+  margin: 0.2rem 0;
+}
+
+.qa-bug-ckeditor .ck.ck-content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.6rem 0 0.9rem;
+}
+
+.qa-bug-ckeditor .ck.ck-content.ck-focused {
+  outline: 2px solid #1f3a8a33;
+  outline-offset: -2px;
+}
+
+.qa-bug-ckeditor.is-dark .ck.ck-toolbar {
+  background: #111827;
+  border-bottom-color: #334155;
+}
+
+.qa-bug-ckeditor.is-dark .ck.ck-content {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.qa-bug-ckeditor.is-dark .ck.ck-toolbar .ck-button {
+  color: #cbd5e1;
+}
+
+@media (max-width: 768px) {
+  .qa-bug-ckeditor .ck.ck-content {
+    min-height: 220px;
+    max-height: 360px;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+}
+
+/* Candidate-side bug report rich content renderer */
+.bug-report-render p {
+  margin: 0 0 0.7rem;
+}
+
+.bug-report-render ul,
+.bug-report-render ol {
+  margin: 0.4rem 0 0.8rem;
+  padding-left: 1.4rem;
+}
+
+.bug-report-render li {
+  margin: 0.18rem 0;
+}
+
+.bug-report-render table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.6rem 0 0.9rem;
+  font-size: 13px;
+}
+
+.bug-report-render figure.table {
+  margin: 0.7rem 0 1rem;
+  overflow-x: auto;
+}
+
+.bug-report-render figure.table table {
+  min-width: 520px;
+}
+
+.bug-report-render th,
+.bug-report-render td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.bug-report-render th {
+  background: #eef2ff;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.bug-report-render img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.6rem 0 0.9rem;
+}

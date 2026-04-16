@@ -36,7 +36,17 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
   const expectedRoute = useMemo(() => {
     if (mode !== "session" || !effectiveSession) return null;
 
-    const hasTextAnswer = (value: string | undefined | null) => String(value || "").trim().length > 0;
+    const hasTextAnswer = (sectionKey: string, value: string | undefined | null) => {
+      const raw = String(value || "");
+      if (sectionKey !== "bug_report") return raw.trim().length > 0;
+      try {
+        const parsed = JSON.parse(raw) as { answerText?: string; answer?: string };
+        const answerText = String(parsed?.answerText || parsed?.answer || "").trim();
+        return answerText.length > 0;
+      } catch {
+        return raw.trim().length > 0;
+      }
+    };
     const sectionAnswers = Array.isArray(effectiveSession.sectionAnswers) ? effectiveSession.sectionAnswers : [];
 
     const isSectionCompleted = (sectionKey: string) => {
@@ -45,13 +55,15 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
         : [];
 
       if (sectionConfigs.length === 0) {
-        return sectionAnswers.some((item) => item.sectionKey === sectionKey && hasTextAnswer(item.answer));
+        return sectionAnswers.some(
+          (item) => item.sectionKey === sectionKey && hasTextAnswer(item.sectionKey, item.answer)
+        );
       }
 
       const requiredConfigs = sectionConfigs.filter((item) => item.required !== false);
       const targetConfigs = requiredConfigs.length > 0 ? requiredConfigs : sectionConfigs;
       const completedCount = sectionAnswers.filter(
-        (item) => item.sectionKey === sectionKey && hasTextAnswer(item.answer)
+        (item) => item.sectionKey === sectionKey && hasTextAnswer(item.sectionKey, item.answer)
       ).length;
       return completedCount >= targetConfigs.length;
     };
@@ -101,6 +113,18 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
     const mcqAnswers = Array.isArray(effectiveSession.mcqAnswers) ? effectiveSession.mcqAnswers : [];
     const sections = getSupportedSections(effectiveSession);
 
+    const hasSectionAnswer = (sectionKey: string, value: string | undefined | null) => {
+      const raw = String(value || "");
+      if (sectionKey !== "bug_report") return raw.trim().length > 0;
+      try {
+        const parsed = JSON.parse(raw) as { answerText?: string; answer?: string };
+        const answerText = String(parsed?.answerText || parsed?.answer || "").trim();
+        return answerText.length > 0;
+      } catch {
+        return raw.trim().length > 0;
+      }
+    };
+
     const isSubmittedForCurrentSession =
       Boolean(effectiveSummary?.submissionId) && effectiveSummary?.submissionId === effectiveSession.submissionId;
 
@@ -120,7 +144,7 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
 
     const uiDone =
       !hasUiPreviewSections(effectiveSession) ||
-      sectionAnswers.some((item) => item.sectionKey === "ui_preview" && String(item.answer || "").trim().length > 0);
+      sectionAnswers.some((item) => item.sectionKey === "ui_preview" && hasSectionAnswer(item.sectionKey, item.answer));
 
     const assessmentKeys = sections.filter(
       (section) => section !== "mcq" && section !== "coding" && section !== "ui_preview"
@@ -128,7 +152,7 @@ export function CandidateRouteGuard({ children, mode }: CandidateRouteGuardProps
     const assessmentDone =
       !hasAssessmentSections(effectiveSession) ||
       assessmentKeys.every((key) =>
-        sectionAnswers.some((item) => item.sectionKey === key && String(item.answer || "").trim().length > 0)
+        sectionAnswers.some((item) => item.sectionKey === key && hasSectionAnswer(item.sectionKey, item.answer))
       );
 
     if (pathname === "/candidate/test") return !isSubmittedForCurrentSession && isMcqEnabled(effectiveSession);

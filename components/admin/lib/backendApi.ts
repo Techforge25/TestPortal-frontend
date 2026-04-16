@@ -87,6 +87,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const response = await fetch(`${API_BASE}${path}`, {
     method: options.method || "GET",
     cache: options.cache ?? "no-store",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
@@ -867,6 +868,25 @@ export async function runCandidateCode(payload: {
   });
 }
 
+export async function uploadCandidateCkeditorImage(payload: {
+  submissionId: string;
+  candidateSessionToken: string;
+  dataUrl: string;
+  fileName?: string;
+}) {
+  return request<{ message: string; url: string; publicId?: string }>(
+    `/api/candidate/submission/${payload.submissionId}/uploads/ckeditor-image`,
+    {
+      method: "POST",
+      headers: { "x-candidate-session": payload.candidateSessionToken },
+      body: {
+        dataUrl: payload.dataUrl,
+        fileName: payload.fileName || "",
+      },
+    }
+  );
+}
+
 export async function getAdminNotificationSettings(token: string) {
   return request<{
     notifications: {
@@ -1059,5 +1079,36 @@ export async function uploadAdminUiTaskPdf(
       body: payload,
     }
   );
+}
+
+export async function uploadAdminCkeditorImage(
+  token: string,
+  payload: { dataUrl: string; fileName?: string }
+) {
+  try {
+    return await request<{ message: string; url: string; publicId?: string }>(
+      "/api/admin/settings/uploads/ckeditor-image",
+      {
+        method: "POST",
+        token,
+        body: payload,
+      }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (
+      !/route not found|not found|cannot post/i.test(message)
+    ) {
+      throw error;
+    }
+    return request<{ message: string; url: string; publicId?: string }>(
+      "/api/admin/uploads/ckeditor-image",
+      {
+        method: "POST",
+        token,
+        body: payload,
+      }
+    );
+  }
 }
 
