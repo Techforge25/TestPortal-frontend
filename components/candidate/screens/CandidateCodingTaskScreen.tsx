@@ -69,9 +69,25 @@ const languageAliasMap: Record<string, string> = {
   dart: "dart",
 };
 
+const starterCodeByLanguage: Record<string, string> = {
+  javascript: "function solution(input) {\n  // Write your code here\n}\n",
+  typescript: "function solution(input: string) {\n  // Write your code here\n}\n",
+  python: "def solution(input_data):\n    # Write your code here\n    pass\n",
+  java: "import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String input = sc.hasNextLine() ? sc.nextLine() : \"\";\n        // Write your code here\n    }\n}\n",
+  cpp: "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n\n    // Write your code here\n    return 0;\n}\n",
+  go: "package main\n\nimport \"fmt\"\n\nfunc main() {\n\t// Write your code here\n\tfmt.Print(\"\")\n}\n",
+  php: "<?php\n\nfunction solution($input) {\n    // Write your code here\n}\n\n$input = stream_get_contents(STDIN);\n$result = solution(trim($input));\nif ($result !== null) {\n    if (is_array($result) || is_object($result)) {\n        echo json_encode($result);\n    } else {\n        echo $result;\n    }\n}\n",
+  ruby: "def solution(input)\n  # Write your code here\nend\n\ninput = STDIN.read\nresult = solution(input.strip)\nprint(result) unless result.nil?\n",
+  dart: "import 'dart:io';\n\nvoid main() {\n  final input = stdin.readLineSync() ?? '';\n  // Write your code here\n  stdout.write(input);\n}\n",
+};
+
 function normalizeLanguageValue(value: string): string | null {
   const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
   return languageAliasMap[normalized] || null;
+}
+
+function getStarterCodeForLanguage(language: string): string {
+  return starterCodeByLanguage[language] || starterCodeByLanguage.javascript;
 }
 
 const fallbackCodingTasks: CodingTask[] = [
@@ -81,7 +97,7 @@ const fallbackCodingTasks: CodingTask[] = [
     description:
       "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target. You may assume that each input would have exactly one solution, and you may not use the same element twice.",
     language: "javascript",
-    starterCode: "function solution(input) {\n  // Write your code here\n}",
+    starterCode: getStarterCodeForLanguage("javascript"),
     examples: [
       { input: "nums = [2,7,11,15], target = 9", output: "[0,1]" },
       { input: "nums = [3,2,4], target = 6", output: "[1,2]" },
@@ -93,7 +109,7 @@ const fallbackCodingTasks: CodingTask[] = [
     description:
       "Write a function that reverses a string without using built-in reverse methods. Return the reversed string as output.",
     language: "javascript",
-    starterCode: "function solution(input) {\n  // input: string\n  // output: reversed string\n}",
+    starterCode: getStarterCodeForLanguage("javascript"),
     examples: [
       { input: 's = "techforge"', output: '"egrofhcet"' },
       { input: 's = "secure"', output: '"eruces"' },
@@ -105,7 +121,7 @@ const fallbackCodingTasks: CodingTask[] = [
     description:
       "Given a string containing just the characters ()[]{} determine if the input string is valid. Every opening bracket must be closed in the correct order.",
     language: "javascript",
-    starterCode: "function solution(input) {\n  // input: brackets string\n  // output: true or false\n}",
+    starterCode: getStarterCodeForLanguage("javascript"),
     examples: [
       { input: 's = "()[]{}"', output: "true" },
       { input: 's = "(]"', output: "false" },
@@ -151,22 +167,26 @@ export function CandidateCodingTaskScreen() {
   const [runResult, setRunResult] = useState<CodeRunResult | null>(null);
   const [runInput, setRunInput] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+  const [editorScrollTop, setEditorScrollTop] = useState(0);
   const codingEnabled = isCodingEnabled(session);
   const mcqEnabled = isMcqEnabled(session);
   const codingTasks = useMemo<CodingTask[]>(
     () =>
       session?.test?.codingTasks?.length
-        ? session.test.codingTasks.map((task) => ({
-            id: `task-${task.index + 1}`,
-            title: task.title,
-            description: task.description,
-            language: normalizeLanguageValue(task.language || "javascript") || "javascript",
-            starterCode: "function solution(input) {\n  // Write your code here\n}",
-            examples: [
-              { input: task.sampleInput || "input = ...", output: task.sampleOutput || "..." },
-              { input: task.sampleInput || "input = ...", output: task.sampleOutput || "..." },
-            ],
-          }))
+        ? session.test.codingTasks.map((task) => {
+            const normalizedLanguage = normalizeLanguageValue(task.language || "javascript") || "javascript";
+            return {
+              id: `task-${task.index + 1}`,
+              title: task.title,
+              description: task.description,
+              language: normalizedLanguage,
+              starterCode: getStarterCodeForLanguage(normalizedLanguage),
+              examples: [
+                { input: task.sampleInput || "input = ...", output: task.sampleOutput || "..." },
+                { input: task.sampleInput || "input = ...", output: task.sampleOutput || "..." },
+              ],
+            };
+        })
         : fallbackCodingTasks,
     [session]
   );
@@ -273,6 +293,10 @@ export function CandidateCodingTaskScreen() {
     setRunResult(null);
     setRunError("");
   }, [taskIndex, activeLanguage]);
+
+  useEffect(() => {
+    setEditorScrollTop(0);
+  }, [taskIndex]);
 
   useEffect(() => {
     if (!codingTasks.length) return;
@@ -431,12 +455,32 @@ export function CandidateCodingTaskScreen() {
           <div className="flex items-center gap-5">
             <AppDropdown
               value={activeLanguage}
-              onChange={(value) =>
+              onChange={(value) => {
+                const nextLanguage = normalizeLanguageValue(value) || "javascript";
+                const previousStarter = getStarterCodeForLanguage(activeLanguage);
+                const originalStarter = getStarterCodeForLanguage(
+                  normalizeLanguageValue(activeTask.language || "") || "javascript"
+                );
+                const nextStarter = getStarterCodeForLanguage(nextLanguage);
+
                 setLanguageByTask((prev) => ({
                   ...prev,
-                  [activeTask.id]: value,
-                }))
-              }
+                  [activeTask.id]: nextLanguage,
+                }));
+
+                setCodeByTask((prev) => {
+                  const current = prev[activeTask.id] ?? "";
+                  const canReplace =
+                    !current.trim() ||
+                    current === previousStarter ||
+                    current === originalStarter;
+                  if (!canReplace) return prev;
+                  return {
+                    ...prev,
+                    [activeTask.id]: nextStarter,
+                  };
+                });
+              }}
               options={availableLanguageOptions}
               className="h-[60px] w-[179px]"
               triggerClassName="h-full rounded-[8px] border border-[#4c4c4c] bg-[#3c3c3c] px-4 text-[18px] font-medium text-white"
@@ -470,18 +514,23 @@ export function CandidateCodingTaskScreen() {
               </div>
             </div>
 
-            <div className="flex min-h-[420px] gap-4 p-4">
-              <div className="min-w-[40px] pt-[2px] text-right font-mono text-sm leading-7 text-[#6b7280]">
-                {codeLines.map((_, index) => (
-                  <p key={index}>{index + 1}</p>
-                ))}
+            <div className="relative p-4">
+              <div className="pointer-events-none absolute bottom-4 left-4 top-4 w-[54px] overflow-hidden border-r border-[#34343a] bg-[#1f1f23]">
+                <div
+                  style={{ transform: `translateY(-${editorScrollTop}px)` }}
+                  className="pt-[2px] text-right font-mono text-sm leading-7 text-[#6b7280]"
+                >
+                  {codeLines.map((_, index) => (
+                    <p key={index} className="pr-2">{index + 1}</p>
+                  ))}
+                </div>
               </div>
-              <div className="w-px self-stretch bg-[#34343a]" />
               <textarea
                 value={codeValue}
                 onChange={(event) => handleCodeChange(event.target.value)}
+                onScroll={(event) => setEditorScrollTop(event.currentTarget.scrollTop)}
                 spellCheck={false}
-                className="h-[420px] w-full resize-none bg-transparent font-mono text-[15px] leading-7 text-[#f8fafc] outline-none placeholder:text-[#9ca3af]"
+                className="h-[420px] w-full resize-none overflow-auto bg-transparent pl-[70px] pr-3 font-mono text-[15px] leading-7 text-[#f8fafc] outline-none placeholder:text-[#9ca3af]"
               />
             </div>
           </div>

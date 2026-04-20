@@ -249,7 +249,7 @@ function parseBugReportAnswer(raw: string): ParsedBugReportAnswer {
 }
 
 function serializeBugReportAnswer(answerText: string, answerHtml: string): string {
-  const normalizedText = String(answerText || "").trim().slice(0, 5000);
+  const normalizedText = String(answerText || "").trim();
   const normalizedHtml = String(answerHtml || "").trim() || plainTextToEditorHtml(normalizedText);
   return JSON.stringify({
     answerText: normalizedText,
@@ -917,7 +917,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                                     onChange={(_event, editor) => {
                                       const draftHtml = editor.getData();
                                       bugReportAnswerHtmlDraftRef.current[section.index] = draftHtml;
-                                      const draftPlain = editorHtmlToPlainText(draftHtml).slice(0, 5000);
+                                      const draftPlain = editorHtmlToPlainText(draftHtml);
                                       setAnswers((prev) => ({
                                         ...prev,
                                         [section.index]: serializeBugReportAnswer(draftPlain, draftHtml),
@@ -926,7 +926,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                                     onBlur={() => {
                                       const draftHtml = bugReportAnswerHtmlDraftRef.current[section.index];
                                       if (typeof draftHtml !== "string") return;
-                                      const draftPlain = editorHtmlToPlainText(draftHtml).slice(0, 5000);
+                                      const draftPlain = editorHtmlToPlainText(draftHtml);
                                       setAnswers((prev) => ({
                                         ...prev,
                                         [section.index]: serializeBugReportAnswer(draftPlain, draftHtml),
@@ -1021,18 +1021,16 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                                   <textarea
                                     value={candidateAnswer}
                                     onChange={(event) => {
-                                      const nextText = event.target.value.slice(0, 5000);
+                                      const nextText = event.target.value;
                                       setAnswers((prev) => ({
                                         ...prev,
                                         [section.index]: serializeBugReportAnswer(nextText, plainTextToEditorHtml(nextText)),
                                       }));
                                     }}
-                                    maxLength={5000}
                                     className="h-[220px] w-full resize-none rounded-[8px] border border-[#dbe3ef] bg-white px-3 py-3 text-[15px] text-[#0f172a] outline-none placeholder:text-[#98a2b3] focus:border-[#1f3a8a]"
                                     placeholder="Write your bug findings, reproduction steps, expected/actual behavior, and priority."
                                   />
                                 )}
-                                <p className="px-3 py-3 text-[11px] text-[#64748b]">Max 5000 characters.</p>
                                 {bugUploading ? (
                                   <p className="px-3 pb-2 text-[12px] text-[#1f3a8a]">Uploading image...</p>
                                 ) : null}
