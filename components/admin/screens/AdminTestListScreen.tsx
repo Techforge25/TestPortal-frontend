@@ -151,6 +151,7 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasCachedOnMountRef = useRef(false);
   const initialFetchHandledRef = useRef(false);
+  const expiryRefreshCooldownRef = useRef(0);
 
   useEffect(() => {
     const cached = readCachedTestRows();
@@ -190,11 +191,8 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
   useEffect(() => {
     if (!initialFetchHandledRef.current) {
       initialFetchHandledRef.current = true;
-      if (hasCachedOnMountRef.current) {
-        // Use cached list immediately; network refresh will happen in poll/visibility.
-      } else {
-        void loadRows(true);
-      }
+      // Even when cache exists, run a silent refresh so passcodes/status stay fresh.
+      void loadRows(!hasCachedOnMountRef.current);
     } else {
       void loadRows(false);
     }
@@ -221,6 +219,33 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [loadRows, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadRows(false);
+      }
+    }, 10_000);
+    return () => window.clearInterval(poll);
+  }, [loadRows, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (document.visibilityState !== "visible") return;
+
+    const hasExpiredActiveCode = rows.some((row) => {
+      if (row.status !== "Active" || !row.passcodeExpiresAt) return false;
+      const expiryMs = new Date(row.passcodeExpiresAt).getTime();
+      return Number.isFinite(expiryMs) && expiryMs <= nowMs;
+    });
+
+    if (!hasExpiredActiveCode) return;
+    const now = Date.now();
+    if (now - expiryRefreshCooldownRef.current < 3000) return;
+    expiryRefreshCooldownRef.current = now;
+    void loadRows(false);
+  }, [loadRows, nowMs, rows, token]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
