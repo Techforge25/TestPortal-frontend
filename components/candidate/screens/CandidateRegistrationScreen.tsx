@@ -34,6 +34,7 @@ type FormState = {
   expectedJoiningDate: string;
   shiftComfortable: string;
 };
+type FieldErrors = Partial<Record<keyof FormState, string>>;
 
 const CANDIDATE_REG_DRAFT_KEY = "candidate_registration_form_draft_v1";
 
@@ -116,6 +117,10 @@ const shiftOptions: DropdownOption[] = [
 
 function sanitizeAlphabetOnly(value: string) {
   return value.replace(/[^a-zA-Z\s]/g, "").replace(/\s{2,}/g, " ");
+}
+
+function sanitizePositionField(value: string) {
+  return value.replace(/[^a-zA-Z0-9\s.,()+\-_/]/g, "").replace(/\s{2,}/g, " ");
 }
 
 function formatPhoneNumber(value: string) {
@@ -463,6 +468,7 @@ export function CandidateRegistrationScreen() {
   }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const branding = usePublicBranding();
 
   useEffect(() => {
@@ -536,8 +542,18 @@ export function CandidateRegistrationScreen() {
   }, [loginDraft]);
 
 function setValue(key: keyof FormState, value: string) {
-    if (key === "fullName" || key === "positionAppliedFor") {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    if (key === "fullName") {
       setForm((prev) => ({ ...prev, [key]: sanitizeAlphabetOnly(value) }));
+      return;
+    }
+    if (key === "positionAppliedFor") {
+      setForm((prev) => ({ ...prev, [key]: sanitizePositionField(value) }));
       return;
     }
     if (key === "phoneNumber") {
@@ -561,55 +577,82 @@ function setValue(key: keyof FormState, value: string) {
       setError("Email and test code are required. Please sign in from the candidate login page.");
       return;
     }
+    const nextFieldErrors: FieldErrors = {};
     const missingField = requiredFields.find(({ key }) => !String(form[key] || "").trim());
     if (missingField) {
-      setError(`${missingField.label} is required.`);
+      nextFieldErrors[missingField.key] = `${missingField.label} is required.`;
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
     if (!/^[A-Za-z\s]+$/.test(form.fullName.trim())) {
-      setError("Full Name must contain only alphabets.");
+      nextFieldErrors.fullName = "Full Name must contain only alphabets.";
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
     if (!/^\+92\d{10}$/.test(form.phoneNumber.trim())) {
-      setError("Phone Number must be +92 followed by 10 digits.");
+      nextFieldErrors.phoneNumber = "Phone Number must be +92 followed by 10 digits.";
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
     if (form.cnic.replace(/\D/g, "").length !== 13) {
-      setError("Cnic Num must contain exactly 13 digits.");
+      nextFieldErrors.cnic = "Cnic Num must contain exactly 13 digits.";
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
-    if (!/^[A-Za-z\s]+$/.test(form.positionAppliedFor.trim())) {
-      setError("Position Applied For must contain only alphabets.");
+    if (!/^[A-Za-z0-9\s.,()+\-_/]+$/.test(form.positionAppliedFor.trim())) {
+      nextFieldErrors.positionAppliedFor = "Position Applied For contains invalid characters.";
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
     if (!/^[A-Za-z0-9\s.,()+\-_/]+$/.test(form.workExperience.trim())) {
-      setError("Work Experience contains invalid characters.");
+      nextFieldErrors.workExperience = "Work Experience contains invalid characters.";
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
     if (!["Single", "Married"].includes(form.maritalStatus)) {
-      setError("Please select Marital Status.");
+      nextFieldErrors.maritalStatus = "Please select Marital Status.";
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
     if (!["Yes", "No"].includes(form.shiftComfortable)) {
-      setError("Please select Comfortable with 9 AM-6 PM shift?");
+      nextFieldErrors.shiftComfortable = "Please select Comfortable with 9 AM-6 PM shift?";
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
-    if (dateFieldKeys.some((key) => Number.isNaN(parseDateToTimestamp(form[key])))) {
-      setError("Please enter valid dates in DD/MM/YYYY format.");
+    const invalidDateFields = dateFieldKeys.filter((key) => Number.isNaN(parseDateToTimestamp(form[key])));
+    if (invalidDateFields.length > 0) {
+      invalidDateFields.forEach((key) => {
+        nextFieldErrors[key] = "Please enter valid date in DD/MM/YYYY format.";
+      });
+      setFieldErrors(nextFieldErrors);
+      setError("");
       return;
     }
     if (form.startDate && form.endDate) {
       const start = parseDateToTimestamp(form.startDate);
       const end = parseDateToTimestamp(form.endDate);
       if (Number.isFinite(start) && Number.isFinite(end) && end < start) {
-        setError("End Date cannot be earlier than Start Date.");
+        nextFieldErrors.endDate = "End Date cannot be earlier than Start Date.";
+        setFieldErrors(nextFieldErrors);
+        setError("");
         return;
       }
       if (form.expectedJoiningDate) {
         const joining = parseDateToTimestamp(form.expectedJoiningDate);
         if (Number.isFinite(joining)) {
           if (joining <= start || joining <= end) {
-            setError("Expected Date of Joining must be later than Start Date and End Date.");
+            nextFieldErrors.expectedJoiningDate =
+              "Expected Date of Joining must be later than Start Date and End Date.";
+            setFieldErrors(nextFieldErrors);
+            setError("");
             return;
           }
         }
@@ -617,6 +660,7 @@ function setValue(key: keyof FormState, value: string) {
     }
 
     setIsSubmitting(true);
+    setFieldErrors({});
     setError("");
     try {
       const response = await candidateLoginWithPasscode({
@@ -685,44 +729,43 @@ function setValue(key: keyof FormState, value: string) {
 
           <div className="mt-8 grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
             {topFields.map((field) => (
-              field.key === "maritalStatus" ? (
-                <div key={field.key} className={field.full ? "md:col-span-2" : ""}>
-                  <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
-                  <AppDropdown
-                    value={form.maritalStatus || ""}
-                    onChange={(value) => setValue("maritalStatus", value)}
-                    options={maritalStatusOptions}
-                    className="h-[52px]"
-                    triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
-                    menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
-                    optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                    selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
-                    chevronClassName="text-[#64748b]"
-                    ariaLabel={field.label}
+              <div key={field.key} className={field.full ? "md:col-span-2" : ""}>
+                {field.key === "maritalStatus" ? (
+                  <>
+                    <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
+                    <AppDropdown
+                      value={form.maritalStatus || ""}
+                      onChange={(value) => setValue("maritalStatus", value)}
+                      options={maritalStatusOptions}
+                      className="h-[52px]"
+                      triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
+                      menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
+                      optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                      selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
+                      chevronClassName="text-[#64748b]"
+                      ariaLabel={field.label}
+                    />
+                  </>
+                ) : dateFieldKeys.includes(field.key) ? (
+                  <CalendarInput
+                    label={field.label}
+                    value={form[field.key]}
+                    onChange={(value) => setValue(field.key, value)}
+                    placeholder={field.placeholder}
                   />
-                </div>
-              ) : dateFieldKeys.includes(field.key) ? (
-                <CalendarInput
-                  key={field.key}
-                  label={field.label}
-                  value={form[field.key]}
-                  onChange={(value) => setValue(field.key, value)}
-                  placeholder={field.placeholder}
-                  className={field.full ? "md:col-span-2" : ""}
-                />
-              ) : (
-                <AuthTextField
-                  key={field.key}
-                  label={field.label}
-                  value={form[field.key]}
-                  onChange={(value) => setValue(field.key, value)}
-                  placeholder={field.placeholder}
-                  type={field.type || "text"}
-                  className={field.full ? "md:col-span-2" : ""}
-                  labelClassName="mb-3 text-[18px] text-[#0f172a]"
-                  inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
-                />
-              )
+                ) : (
+                  <AuthTextField
+                    label={field.label}
+                    value={form[field.key]}
+                    onChange={(value) => setValue(field.key, value)}
+                    placeholder={field.placeholder}
+                    type={field.type || "text"}
+                    labelClassName="mb-3 text-[18px] text-[#0f172a]"
+                    inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
+                  />
+                )}
+                {fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
+              </div>
             ))}
           </div>
 
@@ -730,42 +773,43 @@ function setValue(key: keyof FormState, value: string) {
 
           <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
             {bottomFields.map((field) => (
-              field.key === "shiftComfortable" ? (
-                <div key={field.key}>
-                  <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
-                  <AppDropdown
-                    value={form.shiftComfortable || ""}
-                    onChange={(value) => setValue("shiftComfortable", value)}
-                    options={shiftOptions}
-                    className="h-[52px]"
-                    triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
-                    menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
-                    optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                    selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
-                    chevronClassName="text-[#64748b]"
-                    ariaLabel={field.label}
+              <div key={field.key}>
+                {field.key === "shiftComfortable" ? (
+                  <>
+                    <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
+                    <AppDropdown
+                      value={form.shiftComfortable || ""}
+                      onChange={(value) => setValue("shiftComfortable", value)}
+                      options={shiftOptions}
+                      className="h-[52px]"
+                      triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
+                      menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
+                      optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                      selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
+                      chevronClassName="text-[#64748b]"
+                      ariaLabel={field.label}
+                    />
+                  </>
+                ) : dateFieldKeys.includes(field.key) ? (
+                  <CalendarInput
+                    label={field.label}
+                    value={form[field.key]}
+                    onChange={(value) => setValue(field.key, value)}
+                    placeholder={field.placeholder}
                   />
-                </div>
-              ) : dateFieldKeys.includes(field.key) ? (
-                <CalendarInput
-                  key={field.key}
-                  label={field.label}
-                  value={form[field.key]}
-                  onChange={(value) => setValue(field.key, value)}
-                  placeholder={field.placeholder}
-                />
-              ) : (
-                <AuthTextField
-                  key={field.key}
-                  label={field.label}
-                  value={form[field.key]}
-                  onChange={(value) => setValue(field.key, value)}
-                  placeholder={field.placeholder}
-                  type={field.type || "text"}
-                  labelClassName="mb-3 text-[18px] text-[#0f172a]"
-                  inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
-                />
-              )
+                ) : (
+                  <AuthTextField
+                    label={field.label}
+                    value={form[field.key]}
+                    onChange={(value) => setValue(field.key, value)}
+                    placeholder={field.placeholder}
+                    type={field.type || "text"}
+                    labelClassName="mb-3 text-[18px] text-[#0f172a]"
+                    inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
+                  />
+                )}
+                {fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
+              </div>
             ))}
           </div>
 

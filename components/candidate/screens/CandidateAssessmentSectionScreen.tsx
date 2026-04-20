@@ -549,6 +549,13 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
     session?.test?.roleCategory === "qa_manual" &&
     currentSections.length > 0 &&
     currentSections.every((section) => section.key === "bug_report");
+  const finalActionLabel = useMemo(() => {
+    if (!session) return "Continue";
+    const nextRoute = mode === "ui_preview" ? getRouteAfterUiPreview(session) : getRouteAfterAssessment(session);
+    if (nextRoute === "/candidate/tasks") return "Continue to Coding";
+    if (nextRoute === "/candidate/submitted") return "Submit Test";
+    return "Continue";
+  }, [mode, session]);
   const pageTitle =
     mode === "ui_preview"
       ? "UI Preview Task"
@@ -1098,7 +1105,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                   </AppButton>
                 ) : (
                   <AppButton size="lg" className="min-w-[190px] rounded-[10px]" onClick={handleContinue}>
-                    Continue
+                    {finalActionLabel}
                   </AppButton>
                 )}
               </div>

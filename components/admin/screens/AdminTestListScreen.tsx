@@ -151,7 +151,7 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasCachedOnMountRef = useRef(false);
   const initialFetchHandledRef = useRef(false);
-  const expiryRefreshCooldownRef = useRef(0);
+  const rowsRequestInFlightRef = useRef(false);
 
   useEffect(() => {
     const cached = readCachedTestRows();
@@ -172,6 +172,8 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
   const loadRows = useCallback(
     async (showLoading = true) => {
       if (!token) return;
+      if (rowsRequestInFlightRef.current) return;
+      rowsRequestInFlightRef.current = true;
       if (showLoading) setIsLoading(true);
       setError("");
       try {
@@ -182,6 +184,7 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
         const message = fetchError instanceof Error ? fetchError.message : "Failed to load tests";
         setError(message);
       } finally {
+        rowsRequestInFlightRef.current = false;
         if (showLoading) setIsLoading(false);
       }
     },
@@ -226,26 +229,31 @@ export function AdminTestListScreen({ initialThemeDark = false }: AdminTestListS
       if (document.visibilityState === "visible") {
         void loadRows(false);
       }
-    }, 10_000);
+    }, 5_000);
     return () => window.clearInterval(poll);
   }, [loadRows, token]);
 
-  useEffect(() => {
-    if (!token) return;
-    if (document.visibilityState !== "visible") return;
-
-    const hasExpiredActiveCode = rows.some((row) => {
+  const hasExpiredActiveCode = useMemo(() => {
+    return rows.some((row) => {
       if (row.status !== "Active" || !row.passcodeExpiresAt) return false;
       const expiryMs = new Date(row.passcodeExpiresAt).getTime();
       return Number.isFinite(expiryMs) && expiryMs <= nowMs;
     });
+  }, [nowMs, rows]);
 
-    if (!hasExpiredActiveCode) return;
-    const now = Date.now();
-    if (now - expiryRefreshCooldownRef.current < 3000) return;
-    expiryRefreshCooldownRef.current = now;
+  useEffect(() => {
+    if (!token || !hasExpiredActiveCode) return;
+    if (document.visibilityState !== "visible") return;
+
+    // Fast mode: pull every second while expired passcodes are present.
     void loadRows(false);
-  }, [loadRows, nowMs, rows, token]);
+    const fastRefresh = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadRows(false);
+      }
+    }, 1_000);
+    return () => window.clearInterval(fastRefresh);
+  }, [hasExpiredActiveCode, loadRows, token]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
