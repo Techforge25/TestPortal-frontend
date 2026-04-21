@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import DOMPurify from "dompurify";
 import { AppButton } from "@/components/shared/ui/AppButton";
 import {
   saveCandidateDraft,
@@ -903,7 +904,9 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                                 <div
                                   className="bug-report-render mt-2 text-[14px] leading-6 text-[#334155]"
                                   dangerouslySetInnerHTML={{
-                                    __html: parsedBug.descriptionHtml || plainTextToEditorHtml(parsedBug.description || "No description provided."),
+                                    __html: DOMPurify.sanitize(
+                                      parsedBug.descriptionHtml || plainTextToEditorHtml(parsedBug.description || "No description provided.")
+                                    ),
                                   }}
                                 />
                               </div>
@@ -944,6 +947,7 @@ export function CandidateAssessmentSectionScreen({ mode = "assessment" }: Candid
                                         "numberedList",
                                         "|",
                                         "link",
+                                        "insertTable",
                                         "uploadImage",
                                       ],
                                       image: {

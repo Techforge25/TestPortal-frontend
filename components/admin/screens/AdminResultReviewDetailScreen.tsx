@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import DOMPurify from "dompurify";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AdminFooter } from "@/components/admin/components/AdminFooter";
@@ -896,7 +897,9 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                                 isDark ? "border-slate-600 bg-slate-900 text-slate-100" : "border-[#d6dbe6] bg-white text-[#0f172a]"
                               }`}
                               dangerouslySetInnerHTML={{
-                                __html: parsedBugAnswer.answerHtml || plainTextToEditorHtml(parsedBugAnswer.answerText || "-"),
+                                __html: DOMPurify.sanitize(
+                                  parsedBugAnswer.answerHtml || plainTextToEditorHtml(parsedBugAnswer.answerText || "-")
+                                ),
                               }}
                             />
                           ) : (
