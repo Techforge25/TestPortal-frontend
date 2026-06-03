@@ -250,7 +250,7 @@ export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarP
         ? createPortal(
             <div className="fixed inset-x-0 inset-y-0 z-[120] overflow-y-auto bg-[#0f172a]/65 px-4 py-6 backdrop-blur-[2px] sm:px-6 lg:px-8">
               <div className="flex min-h-full items-center justify-center">
-                <div className={`w-full max-w-[440px] rounded-[14px] border p-6 shadow-[0_24px_80px_rgba(15,23,42,0.38)] ${
+                <div className={`w-full max-w-[440px] rounded-[14px] border p-7 shadow-[0_24px_80px_rgba(15,23,42,0.38)] ${
                 isDark ? "border-slate-700 bg-slate-900" : "border-[#dbe3ef] bg-white"
               }`}>
                   <h3 className={`text-[30px] font-semibold tracking-[-0.45px] [zoom:0.58] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
