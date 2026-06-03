@@ -2,11 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AdminSignInScreen } from "@/components/admin/screens/AdminSignInScreen";
-import { getCandidateTestByPasscode, loginAdmin } from "@/components/admin/lib/backendApi";
-import { setAdminToken } from "@/components/admin/lib/adminAuthStorage";
-import { CandidateSignInScreen } from "@/components/candidate/screens/CandidateSignInScreen";
+import { AdminSignInScreen } from "@/app/admin/AdminSignInPageView";
+import { getCandidateTestByPasscode, loginAdmin } from "@/data.admin/shared/backendApi";
+import { setAdminToken } from "@/data.admin/shared/adminAuthStorage";
+import { CandidateSignInScreen } from "@/app/candidate/auth/CandidateSignInScreen";
 import { saveCandidateAuthDraft } from "@/components/candidate/lib/candidateAuthDraft";
+import {
+  clearCandidateResultSummary,
+  clearCandidateSession,
+} from "@/components/candidate/lib/candidateSessionStorage";
 import { AuthShell } from "@/components/shared/auth/AuthShell";
 import { RoleToggle } from "@/components/shared/auth/RoleToggle";
 
@@ -22,9 +26,15 @@ export function PortalAuthScreen() {
     router.push("/admin");
   };
   const handleCandidateSubmit = async (payload: { email: string; testPasscode: string }) => {
-    await getCandidateTestByPasscode(payload.testPasscode);
-    saveCandidateAuthDraft(payload);
-    router.push("/candidate");
+    const response = await getCandidateTestByPasscode(payload.testPasscode);
+    clearCandidateSession();
+    clearCandidateResultSummary();
+    saveCandidateAuthDraft({
+      ...payload,
+      testTitle: response.test?.title || "",
+      testPosition: response.test?.position || "",
+    });
+    router.replace("/candidate");
   };
 
   const screen =
@@ -45,3 +55,5 @@ export function PortalAuthScreen() {
     />
   );
 }
+
+

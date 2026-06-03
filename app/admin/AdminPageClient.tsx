@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { AdminDashboardScreen } from "@/components/admin/screens/AdminDashboardScreen";
-import { AdminSignInScreen } from "@/components/admin/screens/AdminSignInScreen";
-import { getAdminToken, setAdminToken } from "@/components/admin/lib/adminAuthStorage";
-import { loginAdmin } from "@/components/admin/lib/backendApi";
+import { AdminDashboardScreen } from "./AdminDashboardPageView";
+import { AdminSignInScreen } from "@/app/admin/AdminSignInPageView";
+import { getAdminToken, setAdminToken } from "@/data.admin/shared/adminAuthStorage";
+import { loginAdmin } from "@/data.admin/shared/backendApi";
 
 type AdminPageClientProps = {
   initialThemeDark?: boolean;
@@ -37,4 +37,6 @@ export default function AdminPageClient({ initialThemeDark = false }: AdminPageC
 
   return <AdminDashboardScreen initialThemeDark={initialThemeDark} />;
 }
+
+
 

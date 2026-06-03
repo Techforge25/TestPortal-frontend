@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminSettingsScreen } from "@/components/admin/screens/AdminSettingsScreen";
+import { AdminSettingsScreen } from "./AdminSettingsPageView";
 import { AdminRouteGuard } from "@/components/shared/guards/AdminRouteGuard";
 
 export default function AdminSettingsPage() {
@@ -10,3 +10,4 @@ export default function AdminSettingsPage() {
     </AdminRouteGuard>
   );
 }
+

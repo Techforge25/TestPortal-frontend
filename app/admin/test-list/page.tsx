@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminTestListScreen } from "@/components/admin/screens/AdminTestListScreen";
+import { AdminTestListScreen } from "./AdminTestListPageView";
 import { AdminRouteGuard } from "@/components/shared/guards/AdminRouteGuard";
 
 export default function AdminTestListPage() {
@@ -10,3 +10,4 @@ export default function AdminTestListPage() {
     </AdminRouteGuard>
   );
 }
+

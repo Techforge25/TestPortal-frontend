@@ -5,6 +5,8 @@ const CANDIDATE_AUTH_DRAFT_KEY = "candidate-auth-draft-v1";
 export type CandidateAuthDraft = {
   email: string;
   testPasscode: string;
+  testTitle?: string;
+  testPosition?: string;
 };
 
 export function saveCandidateAuthDraft(payload: CandidateAuthDraft) {

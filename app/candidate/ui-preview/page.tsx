@@ -1,4 +1,4 @@
-import { CandidateAssessmentSectionScreen } from "@/components/candidate/screens/CandidateAssessmentSectionScreen";
+import { CandidateAssessmentSectionScreen } from "../assessment/CandidateAssessmentSectionScreen";
 import { CandidateRouteGuard } from "@/components/shared/guards/CandidateRouteGuard";
 
 export default function CandidateUiPreviewPage() {

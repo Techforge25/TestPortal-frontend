@@ -1,4 +1,4 @@
-import { CandidatePreTestScreen } from "@/components/candidate/screens/CandidatePreTestScreen";
+import { CandidatePreTestScreen } from "./CandidatePreTestScreen";
 import { CandidateRouteGuard } from "@/components/shared/guards/CandidateRouteGuard";
 
 export default function CandidatePreTestPage() {

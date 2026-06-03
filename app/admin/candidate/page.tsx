@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminCandidatesScreen } from "@/components/admin/screens/AdminCandidatesScreen";
+import { AdminCandidatesScreen } from "./AdminCandidatePageView";
 import { AdminRouteGuard } from "@/components/shared/guards/AdminRouteGuard";
 
 export default function AdminCandidatePage() {
@@ -10,3 +10,4 @@ export default function AdminCandidatePage() {
     </AdminRouteGuard>
   );
 }
+

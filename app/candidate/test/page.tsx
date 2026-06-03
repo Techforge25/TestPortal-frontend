@@ -1,4 +1,4 @@
-import { CandidateMcqTestScreen } from "@/components/candidate/screens/CandidateMcqTestScreen";
+import { CandidateMcqTestScreen } from "./CandidateMcqTestScreen";
 import { CandidateRouteGuard } from "@/components/shared/guards/CandidateRouteGuard";
 
 export default function CandidateTestPage() {

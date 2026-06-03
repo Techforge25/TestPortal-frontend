@@ -1,0 +1,211 @@
+Folder PATH listing
+Volume serial number is A6BE-74B0
+C:.
+|   .env.local
+|   .gitignore
+|   eslint.config.mjs
+|   next-env.d.ts
+|   next.config.ts
+|   package-lock.json
+|   package.json
+|   postcss.config.mjs
+|   README.md
+|   structure.txt
+|   tsconfig.json
+|   
++---app
+|   |   globals.css
+|   |   layout.tsx
+|   |   page.tsx
+|   |   
+|   +---admin
+|   |   |   AdminDashboardPageView.tsx
+|   |   |   AdminPageClient.tsx
+|   |   |   AdminShellLayout.tsx
+|   |   |   AdminSignInPageView.tsx
+|   |   |   layout.tsx
+|   |   |   page.tsx
+|   |   |   
+|   |   +---candidate
+|   |   |       AdminCandidatePageView.tsx
+|   |   |       page.tsx
+|   |   |       
+|   |   +---create-test
+|   |   |   |   AdminCreateTestPageView.tsx
+|   |   |   |   createTest.helpers.ts
+|   |   |   |   createTest.stepper.ts
+|   |   |   |   createTest.transform.ts
+|   |   |   |   createTest.types.ts
+|   |   |   |   createTest.validation.ts
+|   |   |   |   createTest.wizard.ts
+|   |   |   |   page.tsx
+|   |   |   |   
+|   |   |   \---sections
+|   |   |           CreateTestStep1BasicInfoSection.tsx
+|   |   |           CreateTestStep2McqSection.tsx
+|   |   |           CreateTestStep3AssessmentSection.tsx
+|   |   |           CreateTestStep3RoleConfigRouter.tsx
+|   |   |           CreateTestStep4SecuritySection.tsx
+|   |   |           CreateTestStep5ReviewPublishSection.tsx
+|   |   |           StepRoleConfigDesigner.tsx
+|   |   |           StepRoleConfigDeveloper.tsx
+|   |   |           StepRoleConfigFrontend.tsx
+|   |   |           StepRoleConfigGeneric.tsx
+|   |   |           StepRoleConfigQa.tsx
+|   |   |           
+|   |   +---notifications
+|   |   |       AdminNotificationsPageView.tsx
+|   |   |       page.tsx
+|   |   |       
+|   |   +---results-review
+|   |   |   |   AdminResultsReviewPageView.tsx
+|   |   |   |   page.tsx
+|   |   |   |   
+|   |   |   \---review
+|   |   |           AdminResultReviewDetailContent.tsx
+|   |   |           page.tsx
+|   |   |           
+|   |   +---settings
+|   |   |       AdminSettingsPageView.tsx
+|   |   |       page.tsx
+|   |   |       
+|   |   +---test-list
+|   |   |       AdminTestListPageView.tsx
+|   |   |       page.tsx
+|   |   |       
+|   |   \---violations-log
+|   |           AdminViolationsLogPageView.tsx
+|   |           page.tsx
+|   |           
+|   \---candidate
+|       |   CandidateRegistrationScreen.tsx
+|       |   page.tsx
+|       |   
+|       +---assessment
+|       |       CandidateAssessmentSectionScreen.tsx
+|       |       page.tsx
+|       |       
+|       +---auth
+|       |       CandidateSignInScreen.tsx
+|       |       
+|       +---dashboard
+|       |       CandidateDashboardScreen.tsx
+|       |       
+|       +---pre-test
+|       |       CandidatePreTestScreen.tsx
+|       |       page.tsx
+|       |       
+|       +---submitted
+|       |       CandidateSubmissionSuccessScreen.tsx
+|       |       page.tsx
+|       |       
+|       +---tasks
+|       |       CandidateCodingTaskScreen.tsx
+|       |       page.tsx
+|       |       
+|       +---test
+|       |       CandidateMcqTestScreen.tsx
+|       |       page.tsx
+|       |       
+|       \---ui-preview
+|               page.tsx
+|               
++---assest
+|   \---images
+|           40.png
+|           favicon.png
+|           profile.png
+|           
++---components
+|   +---admin
+|   |   +---components
+|   |   |   |   AdminFooter.tsx
+|   |   |   |   AdminSelect.tsx
+|   |   |   |   AdminSidebar.tsx
+|   |   |   |   AdminSidebarItem.tsx
+|   |   |   |   AdminStatCard.tsx
+|   |   |   |   AdminTopHeader.tsx
+|   |   |   |   
+|   |   |   \---create-test
+|   |   |           CreateTestActionButtons.tsx
+|   |   |           CreateTestCard.tsx
+|   |   |           CreateTestField.tsx
+|   |   |           CreateTestStepper.tsx
+|   |   |           CreateTestSummaryField.tsx
+|   |   |           CreateTestToggle.tsx
+|   |   |           
+|   |   +---hooks
+|   |   +---lib
+|   |   \---screens
+|   +---auth
+|   |   \---screens
+|   |           PortalAuthScreen.tsx
+|   |           
+|   +---candidate
+|   |   +---components
+|   |   |       CandidateCountdown.tsx
+|   |   |       UiPreviewTaskEditor.tsx
+|   |   |       
+|   |   +---hooks
+|   |   |       useCandidateRealtimeState.ts
+|   |   |       
+|   |   +---lib
+|   |   |       assessmentFlow.ts
+|   |   |       candidateAuthDraft.ts
+|   |   |       candidateSessionStorage.ts
+|   |   |       
+|   |   \---security
+|   |           runtimeStore.ts
+|   |           scoring.ts
+|   |           useCandidateSecurityGuard.ts
+|   |           
+|   \---shared
+|       +---auth
+|       |       AuthShell.tsx
+|       |       AuthTextField.tsx
+|       |       RoleToggle.tsx
+|       |       
+|       +---guards
+|       |       AdminRouteGuard.tsx
+|       |       CandidateRouteGuard.tsx
+|       |       
+|       +---realtime
+|       |       realtimeClient.ts
+|       |       useRealtimeSubscription.ts
+|       |       
+|       \---ui
+|               AppButton.tsx
+|               AppDropdown.tsx
+|               AppPagination.tsx
+|               AppSearchBar.tsx
+|               AppSegmentedControl.tsx
+|               
++---data.admin
+|   \---shared
+|           adminAuthStorage.ts
+|           adminThemeServer.ts
+|           backendApi.ts
+|           runtimeSettings.ts
+|           testListStorage.ts
+|           useAdminTheme.ts
+|           
++---public
+|   |   favicon.png
+|   |   file.svg
+|   |   globe.svg
+|   |   next.svg
+|   |   vercel.svg
+|   |   window.svg
+|   |   
+|   +---assest
+|   |   \---images
+|   |           40.png
+|   |           favicon.png
+|   |           
+|   \---assets
+|       \---images
+|               profile.png
+|               
+\---types
+        ckeditor.d.ts
+        

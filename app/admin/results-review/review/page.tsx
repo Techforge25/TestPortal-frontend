@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { AdminResultReviewDetailScreen } from "@/components/admin/screens/AdminResultReviewDetailScreen";
+import { AdminResultReviewDetailScreen } from "./AdminResultReviewDetailContent";
 import { AdminRouteGuard } from "@/components/shared/guards/AdminRouteGuard";
 
 function AdminResultsReviewDetailPageContent() {
@@ -20,3 +20,4 @@ export default function AdminResultsReviewDetailPage() {
     </AdminRouteGuard>
   );
 }
+

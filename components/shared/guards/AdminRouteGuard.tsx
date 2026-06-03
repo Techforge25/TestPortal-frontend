@@ -3,7 +3,7 @@
 import { ReactNode, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
-import { getAdminToken } from "@/components/admin/lib/adminAuthStorage";
+import { getAdminToken } from "@/data.admin/shared/adminAuthStorage";
 
 type AdminRouteGuardProps = {
   children: ReactNode;
@@ -47,3 +47,4 @@ export function AdminRouteGuard({ children }: AdminRouteGuardProps) {
     </div>
   );
 }
+

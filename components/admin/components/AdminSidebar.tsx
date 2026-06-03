@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AdminSidebarItem } from "@/components/admin/components/AdminSidebarItem";
-import { clearAdminToken } from "@/components/admin/lib/adminAuthStorage";
+import { clearAdminToken } from "@/data.admin/shared/adminAuthStorage";
 import { AppButton } from "@/components/shared/ui/AppButton";
-import { useAdminBranding } from "@/components/admin/lib/runtimeSettings";
+import { useAdminBranding } from "@/data.admin/shared/runtimeSettings";
 
 function DashboardIcon() {
   return (
@@ -170,102 +170,106 @@ export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarP
         )}
       </div>
 
-      <div className="px-[31px] pt-[54px]">
-        <div className="space-y-[18px]">
-          <AdminSidebarItem
-            label="Dashboard"
-            icon={<DashboardIcon />}
-            href="/admin"
-            active={activeItem === "dashboard"}
-            isDark={isDark}
-          />
-          <AdminSidebarItem
-            label="Results & Review"
-            icon={<ResultsIcon />}
-            href="/admin/results-review"
-            active={activeItem === "results"}
-            isDark={isDark}
-          />
-          <AdminSidebarItem
-            label="Create Test"
-            icon={<CreateIcon />}
-            href="/admin/create-test"
-            active={activeItem === "create"}
-            isDark={isDark}
-          />
-          <AdminSidebarItem
-            label="Test List"
-            icon={<ListIcon />}
-            href="/admin/test-list"
-            active={activeItem === "list"}
-            isDark={isDark}
-          />
-          <AdminSidebarItem
-            label="Candidate"
-            icon={<CandidateIcon />}
-            href="/admin/candidate"
-            active={activeItem === "candidate"}
-            isDark={isDark}
-          />
-          <AdminSidebarItem
-            label="Violations Log"
-            icon={<ViolationIcon />}
-            href="/admin/violations-log"
-            active={activeItem === "violations"}
-            isDark={isDark}
-          />
-          <AdminSidebarItem
-            label="Notifications"
-            icon={<NotificationIcon />}
-            href="/admin/notifications"
-            active={activeItem === "notifications"}
-            isDark={isDark}
-          />
-          <AdminSidebarItem
-            label="Settings"
-            icon={<SettingsIcon />}
-            href="/admin/settings"
-            active={activeItem === "settings"}
-            isDark={isDark}
-          />
+      <div className="flex h-[calc(100vh-76px)] flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto px-[31px] pb-6 pt-8 xl:pt-[54px]">
+          <div className="space-y-3 xl:space-y-[18px]">
+            <AdminSidebarItem
+              label="Dashboard"
+              icon={<DashboardIcon />}
+              href="/admin"
+              active={activeItem === "dashboard"}
+              isDark={isDark}
+            />
+            <AdminSidebarItem
+              label="Results & Review"
+              icon={<ResultsIcon />}
+              href="/admin/results-review"
+              active={activeItem === "results"}
+              isDark={isDark}
+            />
+            <AdminSidebarItem
+              label="Create Test"
+              icon={<CreateIcon />}
+              href="/admin/create-test"
+              active={activeItem === "create"}
+              isDark={isDark}
+            />
+            <AdminSidebarItem
+              label="Test List"
+              icon={<ListIcon />}
+              href="/admin/test-list"
+              active={activeItem === "list"}
+              isDark={isDark}
+            />
+            <AdminSidebarItem
+              label="Candidate"
+              icon={<CandidateIcon />}
+              href="/admin/candidate"
+              active={activeItem === "candidate"}
+              isDark={isDark}
+            />
+            <AdminSidebarItem
+              label="Violations Log"
+              icon={<ViolationIcon />}
+              href="/admin/violations-log"
+              active={activeItem === "violations"}
+              isDark={isDark}
+            />
+            <AdminSidebarItem
+              label="Notifications"
+              icon={<NotificationIcon />}
+              href="/admin/notifications"
+              active={activeItem === "notifications"}
+              isDark={isDark}
+            />
+            <AdminSidebarItem
+              label="Settings"
+              icon={<SettingsIcon />}
+              href="/admin/settings"
+              active={activeItem === "settings"}
+              isDark={isDark}
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="absolute bottom-8 left-[31px]">
-        <button
-          type="button"
-          onClick={() => setShowLogoutModal(true)}
-          className={`flex items-center gap-1.5 px-4 transition ${
-            isDark ? "text-red-400 hover:text-red-300" : "text-red-600 hover:text-red-700"
-          }`}
-        >
-          <LogoutIcon />
-          <span className="text-base leading-9">Logout</span>
-        </button>
+        <div className="border-t border-black/5 px-[31px] py-5 dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => setShowLogoutModal(true)}
+            className={`flex items-center gap-1.5 px-4 transition ${
+              isDark ? "text-red-400 hover:text-red-300" : "text-red-600 hover:text-red-700"
+            }`}
+          >
+            <LogoutIcon />
+            <span className="text-base leading-9">Logout</span>
+          </button>
+        </div>
       </div>
 
       {typeof document !== "undefined" && showLogoutModal
         ? createPortal(
-            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#0f172a]/65 backdrop-blur-[2px] px-4">
-              <div className={`w-full max-w-[440px] rounded-[14px] border p-6 shadow-[0_24px_80px_rgba(15,23,42,0.38)] ${
+            <div className="fixed inset-x-0 inset-y-0 z-[120] overflow-y-auto bg-[#0f172a]/65 px-4 py-6 backdrop-blur-[2px] sm:px-6 lg:px-8">
+              <div className="flex min-h-full items-center justify-center">
+                <div className={`w-full max-w-[440px] rounded-[14px] border p-6 shadow-[0_24px_80px_rgba(15,23,42,0.38)] ${
                 isDark ? "border-slate-700 bg-slate-900" : "border-[#dbe3ef] bg-white"
               }`}>
-                <h3 className={`text-[30px] font-semibold tracking-[-0.45px] [zoom:0.58] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
-                  Confirm Logout
-                </h3>
-                <p className={`mt-2 text-sm ${isDark ? "text-slate-300" : "text-[#64748b]"}`}>Are you sure you want to logout?</p>
-                <div className="mt-6 flex justify-end gap-3">
-                  <AppButton variant="ghost" onClick={() => setShowLogoutModal(false)}>Cancel</AppButton>
-                  <AppButton
-                    variant="danger"
-                    onClick={() => {
-                      clearAdminToken();
-                      setShowLogoutModal(false);
-                      router.push("/admin");
-                    }}
-                  >
-                    Logout
-                  </AppButton>
+                  <h3 className={`text-[30px] font-semibold tracking-[-0.45px] [zoom:0.58] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
+                    Confirm Logout
+                  </h3>
+                  <p className={`mt-2 text-sm ${isDark ? "text-slate-300" : "text-[#64748b]"}`}>Are you sure you want to logout?</p>
+                  <div className="mt-6 flex flex-wrap justify-end gap-3">
+                    <AppButton variant="ghost" onClick={() => setShowLogoutModal(false)}>Cancel</AppButton>
+                    <AppButton
+                      variant="danger"
+                      onClick={() => {
+                        clearAdminToken();
+                        setShowLogoutModal(false);
+                        router.push("/admin");
+                      }}
+                    >
+                      Logout
+                    </AppButton>
+                  </div>
                 </div>
               </div>
             </div>,
@@ -275,3 +279,4 @@ export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarP
     </aside>
   );
 }
+

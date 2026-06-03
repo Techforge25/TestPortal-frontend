@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminViolationsLogScreen } from "@/components/admin/screens/AdminViolationsLogScreen";
+import { AdminViolationsLogScreen } from "./AdminViolationsLogPageView";
 import { AdminRouteGuard } from "@/components/shared/guards/AdminRouteGuard";
 
 export default function AdminViolationsLogPage() {
@@ -10,3 +10,4 @@ export default function AdminViolationsLogPage() {
     </AdminRouteGuard>
   );
 }
+

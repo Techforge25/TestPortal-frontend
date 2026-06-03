@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { logCandidateViolation } from "@/components/admin/lib/backendApi";
+import { logCandidateViolation } from "@/data.admin/shared/backendApi";
 import {
   CANDIDATE_RUNTIME_EVENT,
   readRuntimeState,
@@ -448,3 +448,4 @@ export function useCandidateSecurityGuard({
     dismissWarningPopup: () => setWarningPopup(null),
   };
 }
+

@@ -1,4 +1,4 @@
-import { CandidateCodingTaskScreen } from "@/components/candidate/screens/CandidateCodingTaskScreen";
+import { CandidateCodingTaskScreen } from "./CandidateCodingTaskScreen";
 import { CandidateRouteGuard } from "@/components/shared/guards/CandidateRouteGuard";
 
 export default function CandidateTasksPage() {

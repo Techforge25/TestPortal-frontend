@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminNotificationsScreen } from "@/components/admin/screens/AdminNotificationsScreen";
+import { AdminNotificationsScreen } from "./AdminNotificationsPageView";
 import { AdminRouteGuard } from "@/components/shared/guards/AdminRouteGuard";
 
 export default function AdminNotificationsPage() {
@@ -10,3 +10,4 @@ export default function AdminNotificationsPage() {
     </AdminRouteGuard>
   );
 }
+
