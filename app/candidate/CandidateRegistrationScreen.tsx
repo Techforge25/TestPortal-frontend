@@ -239,6 +239,19 @@ function normalizeDateForInput(value: string) {
   return formatDateInput(raw);
 }
 
+function calculateAgeFromDate(value: string) {
+  const timestamp = parseDateToTimestamp(value);
+  if (!Number.isFinite(timestamp)) return NaN;
+  const birthDate = new Date(timestamp);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDelta = today.getMonth() - birthDate.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age;
+}
+
 function BrandMark() {
   return (
     <svg viewBox="0 0 50 34" className="h-[62px] w-[92px]" fill="none" aria-hidden="true">
@@ -707,6 +720,13 @@ function setValue(key: keyof FormState, value: string) {
       invalidDateFields.forEach((key) => {
         nextFieldErrors[key] = "Please enter valid date in DD/MM/YYYY format.";
       });
+      setFieldErrors(nextFieldErrors);
+      setError("");
+      return;
+    }
+    const candidateAge = calculateAgeFromDate(form.dateOfBirth);
+    if (!Number.isFinite(candidateAge) || candidateAge < 16) {
+      nextFieldErrors.dateOfBirth = "Candidate age must be at least 16 years.";
       setFieldErrors(nextFieldErrors);
       setError("");
       return;
