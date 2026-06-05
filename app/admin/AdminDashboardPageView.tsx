@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminStatCard, type AdminStatCardData } from "@/components/admin/components/AdminStatCard";
 import { useAdminTheme } from "@/data.admin/shared/useAdminTheme";
 import { getAdminToken } from "@/data.admin/shared/adminAuthStorage";
 import { getAdminDashboardData, type AdminDashboardResponse } from "@/data.admin/shared/backendApi";
 import { AppButton } from "@/components/shared/ui/AppButton";
-import { AppDropdown } from "@/components/shared/ui/AppDropdown";
 import { useRealtimeSubscription } from "@/components/shared/realtime/useRealtimeSubscription";
 
 function FullSpectrumIcon() {
@@ -94,14 +93,6 @@ function ViolationsIcon() {
   );
 }
 
-type PerformancePeriod = "daily" | "weekly" | "yearly";
-
-const periodOptions: { value: PerformancePeriod; label: string }[] = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "yearly", label: "Yearly" },
-];
-
 const DASHBOARD_CACHE_KEY = "admin_dashboard_cache_v1";
 
 function readCachedDashboard(): AdminDashboardResponse | null {
@@ -130,14 +121,11 @@ type AdminDashboardScreenProps = {
 
 export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboardScreenProps) {
   const router = useRouter();
-  const { isDark, toggleTheme } = useAdminTheme(initialThemeDark);
-  const [token, setToken] = useState<string | null>(null);
-  const [selectedPeriod, setSelectedPeriod] = useState<PerformancePeriod>("weekly");
-  const [dashboard, setDashboard] = useState<AdminDashboardResponse | null>(null);
+  const { isDark } = useAdminTheme(initialThemeDark);
+  const token = getAdminToken();
+  const [dashboard, setDashboard] = useState<AdminDashboardResponse | null>(() => readCachedDashboard());
   const [error, setError] = useState("");
-  const [authError, setAuthError] = useState("");
-  const hasCachedOnMountRef = useRef(false);
-  const initialFetchHandledRef = useRef(false);
+  const authError = token ? "" : "Admin session missing. Please login again.";
 
   const topStats: AdminStatCardData[] = useMemo(
     () => [
@@ -157,7 +145,6 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
     [dashboard]
   );
 
-  const performanceData = dashboard?.performance || { daily: [], weekly: [], yearly: [] };
   const activities = dashboard?.recentActivities || [];
   const rows = dashboard?.recentResults || [];
   const currentDateLabel = useMemo(
@@ -170,22 +157,6 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
       }).format(new Date()),
     []
   );
-
-  useEffect(() => {
-    const cached = readCachedDashboard();
-    if (cached) {
-      setDashboard(cached);
-      hasCachedOnMountRef.current = true;
-    }
-
-    const currentToken = getAdminToken();
-    setToken(currentToken);
-    if (!currentToken) {
-      setAuthError("Admin session missing. Please login again.");
-      return;
-    }
-    setAuthError("");
-  }, []);
 
   const loadDashboard = useCallback(async () => {
     if (!token) return;
@@ -200,15 +171,6 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
     }
   }, [token]);
 
-  useEffect(() => {
-    if (!token) return;
-    if (!initialFetchHandledRef.current) {
-      initialFetchHandledRef.current = true;
-      if (hasCachedOnMountRef.current) return;
-    }
-    void loadDashboard();
-  }, [loadDashboard, token]);
-
   useRealtimeSubscription({
     token,
     events: ["admin:dashboard.updated", "admin:data.changed"],
@@ -222,13 +184,22 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
 
   useEffect(() => {
     if (!token) return;
+
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void loadDashboard();
       }
     };
+
+    const timerId = window.setTimeout(() => {
+      void loadDashboard();
+    }, 0);
+
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearTimeout(timerId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [loadDashboard, token]);
 
   return (
@@ -299,6 +270,7 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
             </section>
 
             <section className="grid gap-6 xl:grid-cols-[2.2fr_1fr]">
+              {/*
               <article
                 className={`rounded-xl border p-5 ${
                   isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-white"
@@ -373,41 +345,12 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
                   </div>
                 </div>
               </article>
-
-              <article className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className={`text-[32px] font-semibold tracking-[-0.48px] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
-                    Recent Activity
-                  </h3>
-                  {/* <AppButton
-                    variant="ghost"
-                    size="sm"
-                    className={isDark ? "text-slate-300" : "text-[#475569]"}
-                    // rightIcon={<ChevronDownIcon />}
-                  >
-                    View All
-                  </AppButton> */}
-                </div>
-                {activities.map((item, index) => (
-                  <div
-                    key={`${item.title}-${item.time}-${index}`}
-                    className={`rounded-lg border p-3 ${
-                      isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-white"
-                    }`}
-                  >
-                    <p className={isDark ? "text-slate-100" : "text-[#475569]"}>{item.title}</p>
-                    {item.sub ? <p className="text-xs text-[#1f3a8a]">{item.sub}</p> : null}
-                    <p className={`text-xs ${isDark ? "text-slate-400" : "text-[#475569]"}`}>{item.time}</p>
-                  </div>
-                ))}
-              </article>
-            </section>
-
-            <section
+              */}
+              <section
               className={`rounded-3xl border px-6 py-9 ${
                 isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-white"
               }`}
-            >
+             >
               <h2 className={`text-[40px] font-semibold tracking-[-0.6px] [zoom:0.55] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
                 Test List
               </h2>
@@ -443,6 +386,37 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
                 ))}
               </div>
             </section>
+
+              <article className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-[32px] font-semibold tracking-[-0.48px] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
+                    Recent Activity
+                  </h3>
+                  {/* <AppButton
+                    variant="ghost"
+                    size="sm"
+                    className={isDark ? "text-slate-300" : "text-[#475569]"}
+                    // rightIcon={<ChevronDownIcon />}
+                  >
+                    View All
+                  </AppButton> */}
+                </div>
+                {activities.map((item, index) => (
+                  <div
+                    key={`${item.title}-${item.time}-${index}`}
+                    className={`rounded-lg border p-3 ${
+                      isDark ? "border-slate-700 bg-slate-800" : "border-[#e2e8f0] bg-white"
+                    }`}
+                  >
+                    <p className={isDark ? "text-slate-100" : "text-[#475569]"}>{item.title}</p>
+                    {item.sub ? <p className="text-xs text-[#1f3a8a]">{item.sub}</p> : null}
+                    <p className={`text-xs ${isDark ? "text-slate-400" : "text-[#475569]"}`}>{item.time}</p>
+                  </div>
+                ))}
+              </article>
+            </section>
+
+            
           </div>
         </section>
       </div>

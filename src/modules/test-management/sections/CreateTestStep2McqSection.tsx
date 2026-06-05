@@ -26,7 +26,6 @@ type QuestionBlockProps = {
   prompt: string;
   options: string[];
   selectedIndex: number;
-  marks?: string;
   onPromptChange: (value: string) => void;
   onDelete: () => void;
   onSelectOption: (index: number) => void;
@@ -34,7 +33,7 @@ type QuestionBlockProps = {
   isDark: boolean;
 };
 
-function QuestionBlock({ title, prompt, options, selectedIndex, marks = "1", onPromptChange, onDelete, onSelectOption, onOptionChange, isDark }: QuestionBlockProps) {
+function QuestionBlock({ title, prompt, options, selectedIndex, onPromptChange, onDelete, onSelectOption, onOptionChange, isDark }: QuestionBlockProps) {
   return (
     <article className={`rounded-[10px] border p-3 ${isDark ? "border-slate-700 bg-slate-900" : "border-[#e2e8f0]"}`}>
       <div className="mb-3 flex items-center justify-between">
@@ -51,8 +50,10 @@ function QuestionBlock({ title, prompt, options, selectedIndex, marks = "1", onP
         ))}
       </div>
       <div className="mt-3 flex items-center gap-2">
-        <span className={`text-[30px] [zoom:0.5] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>Marks :</span>
-        <input defaultValue={marks} className={`h-7 w-[62px] rounded-[8px] border px-2 ${isDark ? "border-slate-600 bg-slate-800 text-slate-100" : "border-[#dbe3ef] text-[#0f172a]"}`} />
+        <span className={`text-[30px] [zoom:0.5] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>Marks:</span>
+        <span className={`inline-flex h-7 min-w-[76px] items-center justify-center rounded-[8px] border px-2 text-sm font-medium ${isDark ? "border-slate-600 bg-slate-800 text-slate-100" : "border-[#dbe3ef] bg-[#f8fafc] text-[#0f172a]"}`}>
+          1 each
+        </span>
       </div>
     </article>
   );
@@ -70,7 +71,7 @@ export function CreateTestStep2McqSection(props: CreateTestStep2McqSectionProps)
   if (step !== 2) return null;
 
   return (
-    <CreateTestCard title="Add MCQ Questions" subtitle={`${mcqQuestions.length} Questions Added`} isDark={isDark}>
+    <CreateTestCard title="Add MCQ Questions" subtitle={`${mcqQuestions.length} Questions Added • 1 mark per MCQ`} isDark={isDark}>
       <div className="flex justify-end">
         <AppButton
           variant="primary"
@@ -88,7 +89,6 @@ export function CreateTestStep2McqSection(props: CreateTestStep2McqSectionProps)
           prompt={question.prompt}
           options={question.options}
           selectedIndex={question.selectedIndex}
-          marks={question.marks}
           onPromptChange={(value: string) => setMcqQuestions((prev) => prev.map((item) => (item.id === question.id ? { ...item, prompt: value } : item)))}
           onDelete={() => setMcqQuestions((prev) => prev.filter((item) => item.id !== question.id).map((item, idx) => ({ ...item, id: idx + 1 })))}
           onSelectOption={(selectedIndex: number) => setMcqQuestions((prev) => prev.map((item) => (item.id === question.id ? { ...item, selectedIndex } : item)))}

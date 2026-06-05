@@ -74,7 +74,7 @@ const topFields: FieldConfig[] = [
     placeholder: "401, Al-Falah Court I.I.Chundrigar Road, Karachi",
     full: true,
   },
-  { key: "workExperience", label: "Work Experience", placeholder: "Frontend Developer", full: true },
+  { key: "workExperience", label: "Work Experience", placeholder: "Select Work Experience", full: true },
   { key: "startDate", label: "Start Date", placeholder: "dd/mm/yyyy" },
   { key: "endDate", label: "End Date", placeholder: "dd/mm/yyyy" },
   // { key: "currentSalary", label: "Current Salary", placeholder: "80,000" },
@@ -96,7 +96,6 @@ const requiredFields: Array<{ key: keyof FormState; label: string }> = [
   { key: "dateOfBirth", label: "Date of Birth" },
   { key: "positionAppliedFor", label: "Position Applied For" },
   { key: "residentialAddress", label: "Residential Address" },
-  { key: "workExperience", label: "Work Experience" },
   { key: "startDate", label: "Start Date" },
   { key: "endDate", label: "End Date" },
   { key: "currentSalary", label: "Current Salary" },
@@ -121,6 +120,20 @@ const maritalStatusOptions: DropdownOption[] = [
 const shiftOptions: DropdownOption[] = [
   { value: "Yes", label: "Yes" },
   { value: "No", label: "No" },
+];
+
+const workExperienceOptions: DropdownOption[] = [
+  { value: "Less than 1 year", label: "Less than 1 year" },
+  { value: "1 year", label: "1 year" },
+  { value: "2 years", label: "2 years" },
+  { value: "3 years", label: "3 years" },
+  { value: "4 years", label: "4 years" },
+  { value: "5 years", label: "5 years" },
+  { value: "6 years", label: "6 years" },
+  { value: "7 years", label: "7 years" },
+  { value: "8 years", label: "8 years" },
+  { value: "9 years", label: "9 years" },
+  { value: "10 years", label: "10 years" },
 ];
 
 const pakistanAddressKeywords = [
@@ -653,43 +666,26 @@ function setValue(key: keyof FormState, value: string) {
       return;
     }
     const nextFieldErrors: FieldErrors = {};
-    const missingField = requiredFields.find(({ key }) => !String(form[key] || "").trim());
-    if (missingField) {
-      nextFieldErrors[missingField.key] = `${missingField.label} is required.`;
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
-    }
+    requiredFields.forEach(({ key, label }) => {
+      if (!String(form[key] || "").trim()) {
+        nextFieldErrors[key] = `${label} is required.`;
+      }
+    });
     if (!/^[A-Za-z\s]+$/.test(form.fullName.trim())) {
       nextFieldErrors.fullName = "Full Name must contain only alphabets.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     if (!/^\+92\d{10}$/.test(form.phoneNumber.trim())) {
       nextFieldErrors.phoneNumber = "Phone Number must be +92 followed by 10 digits.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     if (form.cnic.replace(/\D/g, "").length !== 13) {
       nextFieldErrors.cnic = "Cnic Num must contain exactly 13 digits.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     if (!/^[A-Za-z0-9\s.,()+\-_/]+$/.test(form.positionAppliedFor.trim())) {
       nextFieldErrors.positionAppliedFor = "Position Applied For contains invalid characters.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     if (!allowsGlobalAddress && !looksLikePakistaniAddress(form.residentialAddress.trim())) {
       nextFieldErrors.residentialAddress =
         "Residential Address must be a Pakistani address unless this is a remote or permanent work-from-home role.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     // if (!/^[0-9\s,.]+$/.test(form.currentSalary.trim())) {
     //   nextFieldErrors.currentSalary = "Current Salary must contain only numbers.";
@@ -699,46 +695,28 @@ function setValue(key: keyof FormState, value: string) {
     // }
     if (!/^[0-9\s,.]+$/.test(form.expectedSalary.trim())) {
       nextFieldErrors.expectedSalary = "Expected Salary must contain only numbers.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     if (!["Single", "Married"].includes(form.maritalStatus)) {
       nextFieldErrors.maritalStatus = "Please select Marital Status.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     if (!["Yes", "No"].includes(form.shiftComfortable)) {
       nextFieldErrors.shiftComfortable = "Please select Comfortable with 9 AM-6 PM shift?";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     const invalidDateFields = dateFieldKeys.filter((key) => Number.isNaN(parseDateToTimestamp(form[key])));
     if (invalidDateFields.length > 0) {
       invalidDateFields.forEach((key) => {
         nextFieldErrors[key] = "Please enter valid date in DD/MM/YYYY format.";
       });
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     const candidateAge = calculateAgeFromDate(form.dateOfBirth);
     if (!Number.isFinite(candidateAge) || candidateAge < 16) {
       nextFieldErrors.dateOfBirth = "Candidate age must be at least 16 years.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
     }
     if (form.startDate && form.endDate) {
       const start = parseDateToTimestamp(form.startDate);
       const end = parseDateToTimestamp(form.endDate);
       if (Number.isFinite(start) && Number.isFinite(end) && end < start) {
         nextFieldErrors.endDate = "End Date cannot be earlier than Start Date.";
-        setFieldErrors(nextFieldErrors);
-        setError("");
-        return;
       }
       if (form.expectedJoiningDate) {
         const joining = parseDateToTimestamp(form.expectedJoiningDate);
@@ -746,12 +724,16 @@ function setValue(key: keyof FormState, value: string) {
           if (joining <= start || joining <= end) {
             nextFieldErrors.expectedJoiningDate =
               "Expected Date of Joining must be later than Start Date and End Date.";
-            setFieldErrors(nextFieldErrors);
-            setError("");
-            return;
           }
         }
       }
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      delete nextFieldErrors.workExperience;
+      setFieldErrors(nextFieldErrors);
+      setError("");
+      return;
     }
 
     setIsSubmitting(true);
@@ -841,6 +823,22 @@ function setValue(key: keyof FormState, value: string) {
                       ariaLabel={field.label}
                     />
                   </>
+                ) : field.key === "workExperience" ? (
+                  <>
+                    <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
+                    <AppDropdown
+                      value={form.workExperience || ""}
+                      onChange={(value) => setValue("workExperience", value)}
+                      options={workExperienceOptions}
+                      className="h-[52px]"
+                      triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
+                      menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
+                      optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                      selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
+                      chevronClassName="text-[#64748b]"
+                      ariaLabel={field.label}
+                    />
+                  </>
                 ) : dateFieldKeys.includes(field.key) ? (
                   <CalendarInput
                     label={field.label}
@@ -864,7 +862,7 @@ function setValue(key: keyof FormState, value: string) {
                     Enter the candidate&apos;s current Pakistani residing address. Non-Pakistani addresses are allowed only for remote or permanent work-from-home roles.
                   </p>
                 ) : null}
-                {fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
+                {field.key !== "workExperience" && fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
               </div>
             ))}
           </div>
@@ -908,7 +906,7 @@ function setValue(key: keyof FormState, value: string) {
                     inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
                   />
                 )}
-                {fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
+                {field.key !== "workExperience" && fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
               </div>
             ))}
           </div>
@@ -924,6 +922,16 @@ function setValue(key: keyof FormState, value: string) {
           >
             Start Test
           </AppButton>
+          {Object.keys(fieldErrors).length > 0 ? (
+            <div className="mt-3 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-semibold text-red-700">Please fix these fields:</p>
+              <ul className="mt-2 space-y-1 text-sm text-red-600">
+                {Object.entries(fieldErrors).map(([key, message]) =>
+                  key !== "workExperience" && message ? <li key={key}>{message}</li> : null
+                )}
+              </ul>
+            </div>
+          ) : null}
           {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
         </article>
       </section>

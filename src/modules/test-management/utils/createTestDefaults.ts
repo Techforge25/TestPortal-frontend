@@ -20,7 +20,7 @@ export function buildDefaultCodingTask(id: number): CreateTestCodingTask {
     taskName: "New Task",
     language: "JavaScript",
     description: "Write the coding task statement here.",
-    marks: "25",
+    marks: "0",
     testCases: [
       {
         id: 1,

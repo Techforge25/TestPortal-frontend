@@ -498,8 +498,6 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
               <div class="divider"></div>
 
               <div class="section grid-2">
-                ${field("Current Salary", detail.candidateProfile.currentSalary || "")}
-                ${field("Expected Salary", detail.candidateProfile.expectedSalary || "")}
                 ${field("Expected Date of Joining", detail.candidateProfile.expectedJoiningDate || "")}
                 ${field("Comfortable with 9 AM-6 PM shift?", detail.candidateProfile.shiftComfortable || "")}
               </div>

@@ -5,6 +5,10 @@ import type {
   CreateTestRole,
   CreateTestSecuritySettings,
 } from "../types/createTest.types";
+import {
+  distributeIntegerMarks,
+  getCodingMarksPool,
+} from "../utils/createTestMarks";
 
 export { normalizePublishStatus } from "./createTest.transform";
 
@@ -32,6 +36,18 @@ export function buildCreateTestSavePayload(
   input: BuildCreateTestPayloadInput
 ): SaveAdminTestPayload {
   const duration = Number.parseInt(input.totalDuration, 10);
+  const normalizedMcqQuestions = input.mcqQuestions.map((item) => ({
+    prompt: item.prompt.trim() || "Question",
+    options: item.options.map((option) => option.trim() || "Option"),
+    selectedIndex: item.selectedIndex,
+    marks: 1,
+  }));
+  const codingMarksDistribution = input.codingSectionEnabled
+    ? distributeIntegerMarks(
+        getCodingMarksPool(normalizedMcqQuestions.length),
+        input.codingTasks.length
+      )
+    : [];
 
   return {
     id: input.editingTestId,
@@ -53,18 +69,13 @@ export function buildCreateTestSavePayload(
       disableRightClick: input.securitySettings.disableRightClick,
       devToolsDetection: input.securitySettings.devToolsDetection,
     },
-    mcqQuestions: input.mcqQuestions.map((item) => ({
-      prompt: item.prompt.trim() || "Question",
-      options: item.options.map((option) => option.trim() || "Option"),
-      selectedIndex: item.selectedIndex,
-      marks: Number.parseInt(item.marks, 10) || 1,
-    })),
+    mcqQuestions: normalizedMcqQuestions,
     codingTasks: input.codingSectionEnabled
-      ? input.codingTasks.map((item) => ({
+      ? input.codingTasks.map((item, index) => ({
           taskName: item.taskName.trim() || "Task",
           description: item.description.trim() || "Task description",
           language: item.language,
-          marks: Number.parseInt(item.marks, 10) || 10,
+          marks: codingMarksDistribution[index] ?? 0,
           sampleInput:
             item.testCases.find((testCase) => !testCase.isHidden)?.input ||
             item.testCases[0]?.input ||

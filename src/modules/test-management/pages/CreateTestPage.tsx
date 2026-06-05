@@ -64,6 +64,12 @@ import {
   buildDefaultCodingTask,
   buildDefaultQuestion,
 } from "../utils/createTestDefaults";
+import {
+  distributeIntegerMarks,
+  getCodingMarksPool,
+  MAX_MCQ_QUESTIONS,
+  normalizeMcqCount,
+} from "../utils/createTestMarks";
 import { useCreateTestWizard } from "../hooks/useCreateTestWizard";
 
 const  CKEditor = dynamic(
@@ -661,7 +667,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
                 taskName,
                 language: "JavaScript",
                 description: "Write the coding task statement here.",
-                marks: 25,
+                marks: 0,
                 testCases: [{ input: "[input] , expected", expectedOutput: "[output]", isHidden: false, weight: 1 }],
               }))
         ).map((task, index) => ({
@@ -670,7 +676,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
           taskName: task.taskName || `Task ${index + 1}`,
           language: task.language || "JavaScript",
           description: task.description || "Write the coding task statement here.",
-          marks: String(Number.isFinite(Number(task.marks)) ? Number(task.marks) : 25),
+          marks: String(Number.isFinite(Number(task.marks)) ? Number(task.marks) : 0),
           testCases:
             Array.isArray(task.testCases) && task.testCases.length > 0
               ? task.testCases.map((testCase, tcIndex) => ({
@@ -694,7 +700,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
             language: "JavaScript",
             description:
               "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.",
-            marks: "25",
+            marks: "0",
             testCases: [
               { id: 1, input: "[2,7,11,15] , 9", expectedOutput: "[0,1]", isHidden: false, weight: "1" },
               { id: 2, input: "[3,2,4] , 6", expectedOutput: "[1,2]", isHidden: true, weight: "2" },
@@ -707,7 +713,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
             language: "JavaScript",
             description:
               "Write a function that reverses a string. The input string is given as an array of characters.",
-            marks: "25",
+            marks: "0",
             testCases: [
               { id: 1, input: '["h","e","l","l","o"]', expectedOutput: '["o","l","l","e","h"]', isHidden: false, weight: "1" },
             ],
@@ -738,6 +744,26 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
     }
     return initial;
   });
+
+  useEffect(() => {
+    setMcqQuestions((prev) =>
+      prev.map((question) => (question.marks === "1" ? question : { ...question, marks: "1" }))
+    );
+  }, [totalMcqs]);
+
+  useEffect(() => {
+    if (!codingSectionEnabled) return;
+    const distributedMarks = distributeIntegerMarks(
+      getCodingMarksPool(normalizeMcqCount(totalMcqs)),
+      codingTasks.length
+    );
+    setCodingTasks((prev) =>
+      prev.map((task, index) => {
+        const nextMarks = String(distributedMarks[index] ?? 0);
+        return task.marks === nextMarks ? task : { ...task, marks: nextMarks };
+      })
+    );
+  }, [codingSectionEnabled, codingTasks.length, totalMcqs]);
 
   useEffect(() => {
     if (initialDraft) return;
@@ -1081,6 +1107,8 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
         nextErrors.totalMcqs = "Total MCQs is required.";
       } else if (!Number.isFinite(mcqValue) || mcqValue <= 0) {
         nextErrors.totalMcqs = "Total MCQs must be greater than 0.";
+      } else if (mcqValue > MAX_MCQ_QUESTIONS) {
+        nextErrors.totalMcqs = `Total MCQs cannot be more than ${MAX_MCQ_QUESTIONS}.`;
       }
 
       if (codingSectionEnabled) {
@@ -1103,8 +1131,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
       } else if (!enabledSections.length) {
         setEnabledSections(["mcq"]);
       }
-      const parsedMcqs = Number.parseInt(totalMcqs, 10);
-      const totalMcqsCount = Number.isFinite(parsedMcqs) && parsedMcqs > 0 ? parsedMcqs : 1;
+      const totalMcqsCount = normalizeMcqCount(totalMcqs);
       const parsedCodingTasks = Number.parseInt(totalCodingTasks, 10);
       const totalCodingTasksCount =
         Number.isFinite(parsedCodingTasks) && parsedCodingTasks > 0 ? parsedCodingTasks : 1;
@@ -1117,6 +1144,7 @@ export function AdminCreateTestScreen({ initialThemeDark = false }: AdminCreateT
         ).map((item, idx) => ({
           ...item,
           id: idx + 1,
+          marks: "1",
         }));
       });
 

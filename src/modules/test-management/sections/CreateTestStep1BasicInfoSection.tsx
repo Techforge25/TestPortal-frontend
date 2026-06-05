@@ -167,6 +167,9 @@ export function CreateTestStep1BasicInfoSection({
             }}
             isDark={isDark}
           />
+          <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>
+            Maximum 50 MCQs. Each MCQ carries 1 mark.
+          </p>
           {basicInfoErrors.totalMcqs ? <p className="mt-1 text-sm text-red-600">{basicInfoErrors.totalMcqs}</p> : null}
         </div>
         {codingSectionEnabled ? (
@@ -185,6 +188,9 @@ export function CreateTestStep1BasicInfoSection({
               }}
               isDark={isDark}
             />
+            <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>
+              Coding task marks are auto-distributed from the remaining marks out of 100.
+            </p>
             {basicInfoErrors.totalCodingTasks ? <p className="mt-1 text-sm text-red-600">{basicInfoErrors.totalCodingTasks}</p> : null}
           </div>
         ) : null}
