@@ -55,7 +55,7 @@ export function AdminSignInScreen({ onSubmit }: AdminSignInScreenProps) {
           <input type="checkbox" className="size-4 accent-[#1f3a8a]" />
           Remember me
         </label>
-        {/* <button className="text-[#1f3a8a]" type="button">
+        {/* <button clsassName="text-[#1f3a8a]" type="button">
           Forgot Password?
         </button> */}
       </div>
