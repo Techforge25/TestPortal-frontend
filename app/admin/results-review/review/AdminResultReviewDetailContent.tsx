@@ -1100,7 +1100,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                 ["End Date", detail.candidateProfile.endDate],
                 // ["Current Salary", detail.candidateProfile.currentSalary],
                 // ["Expected Salary", detail.candidateProfile.expectedSalary],
-                ["Expected Date of Joining", detail.candidateProfile.expectedJoiningDate],
+                ["Expected date of Joining", detail.candidateProfile.expectedJoiningDate],
                 ["Comfortable with 9 AM-6 PM shift?", detail.candidateProfile.shiftComfortable],
               ].map(([label, value]) => (
                 <div key={label}>
