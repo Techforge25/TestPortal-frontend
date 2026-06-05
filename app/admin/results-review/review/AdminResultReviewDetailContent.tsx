@@ -1073,7 +1073,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
               {[
                 ["Email Address", detail.candidateEmail],
                 ["Phone Number", detail.candidateProfile.phoneNumber],
-                ["Cnic Num", detail.candidateProfile.cnic],
+                ["Cnic No", detail.candidateProfile.cnic],
                 ["Marital Status", detail.candidateProfile.maritalStatus],
                 ["Qualification", detail.candidateProfile.qualification],
                 ["Date of Birth", detail.candidateProfile.dateOfBirth],
