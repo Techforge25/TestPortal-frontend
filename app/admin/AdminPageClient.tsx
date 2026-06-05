@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { AdminDashboardScreen } from "./AdminDashboardPageView";
 import { AdminSignInScreen } from "@/app/admin/AdminSignInPageView";
-import { getAdminToken, setAdminToken } from "@/data.admin/shared/adminAuthStorage";
+import { getAdminToken, setAdminToken, subscribeAdminAuth } from "@/data.admin/shared/adminAuthStorage";
 import { loginAdmin } from "@/data.admin/shared/backendApi";
 
 type AdminPageClientProps = {
@@ -12,19 +12,16 @@ type AdminPageClientProps = {
 
 export default function AdminPageClient({ initialThemeDark = false }: AdminPageClientProps) {
   const isHydrated = useSyncExternalStore(
-    () => () => {},
+    subscribeAdminAuth,
     () => true,
     () => false
   );
-  const [token, setToken] = useState<string | null>(null);
   const storedToken = isHydrated ? getAdminToken() : null;
-  const effectiveToken = token || storedToken;
-  const isLoggedIn = Boolean(effectiveToken);
+  const isLoggedIn = Boolean(storedToken);
 
   async function handleLogin(payload: { email: string; password: string }) {
     const response = await loginAdmin(payload.email, payload.password);
     setAdminToken(response.token);
-    setToken(response.token);
   }
 
   if (!isLoggedIn) {

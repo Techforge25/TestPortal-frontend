@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { AdminFooter } from "@/components/admin/components/AdminFooter";
 import { AdminSidebar } from "@/components/admin/components/AdminSidebar";
 import { AdminTopHeader } from "@/components/admin/components/AdminTopHeader";
-import { getAdminToken } from "@/data.admin/shared/adminAuthStorage";
+import { getAdminToken, subscribeAdminAuth } from "@/data.admin/shared/adminAuthStorage";
 import { useAdminTheme } from "@/data.admin/shared/useAdminTheme";
 
 function resolveShellMeta(pathname: string) {
@@ -21,8 +21,9 @@ function resolveShellMeta(pathname: string) {
 
 export function AdminShellLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const isHydrated = useSyncExternalStore(
-    () => () => {},
+    subscribeAdminAuth,
     () => true,
     () => false
   );
@@ -40,9 +41,19 @@ export function AdminShellLayout({ children }: { children: React.ReactNode }) {
   return (
     <main className={`min-h-screen ${isDark ? "bg-slate-950" : "bg-[#f8fafc]"}`}>
       <div className="flex min-h-screen w-full">
-        <AdminSidebar isDark={isDark} activeItem={shellMeta.activeItem} />
+        <AdminSidebar
+          isDark={isDark}
+          activeItem={shellMeta.activeItem}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        />
         <section className="flex w-full flex-col">
-          <AdminTopHeader isDark={isDark} onToggleTheme={toggleTheme} currentPage={shellMeta.currentPage} />
+          <AdminTopHeader
+            isDark={isDark}
+            onToggleTheme={toggleTheme}
+            currentPage={shellMeta.currentPage}
+            onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+          />
           <div className="flex-1">{children}</div>
           <AdminFooter isDark={isDark} />
         </section>

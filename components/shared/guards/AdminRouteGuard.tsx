@@ -3,7 +3,7 @@
 import { ReactNode, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/shared/ui/AppButton";
-import { getAdminToken } from "@/data.admin/shared/adminAuthStorage";
+import { getAdminToken, subscribeAdminAuth } from "@/data.admin/shared/adminAuthStorage";
 
 type AdminRouteGuardProps = {
   children: ReactNode;
@@ -12,7 +12,7 @@ type AdminRouteGuardProps = {
 export function AdminRouteGuard({ children }: AdminRouteGuardProps) {
   const router = useRouter();
   const isHydrated = useSyncExternalStore(
-    () => () => {},
+    subscribeAdminAuth,
     () => true,
     () => false
   );

@@ -23,7 +23,7 @@ export function PortalAuthScreen() {
   const handleAdminSubmit = async (payload: { email: string; password: string }) => {
     const response = await loginAdmin(payload.email, payload.password);
     setAdminToken(response.token);
-    router.push("/admin");
+    router.replace("/admin");
   };
   const handleCandidateSubmit = async (payload: { email: string; testPasscode: string }) => {
     const response = await getCandidateTestByPasscode(payload.testPasscode);

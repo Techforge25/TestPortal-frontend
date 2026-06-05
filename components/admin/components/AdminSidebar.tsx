@@ -27,11 +27,7 @@ function ResultsIcon() {
 function CreateIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="size-6">
-      <path
-        d="M12 4L20 12L12 20L4 12L12 4Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      />
+      <path d="M12 4L20 12L12 20L4 12L12 4Z" stroke="currentColor" strokeWidth="1.8" />
       <path d="M12 8V16" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8 12H16" stroke="currentColor" strokeWidth="1.8" />
     </svg>
@@ -105,8 +101,18 @@ function LogoutIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="size-5">
+      <path d="M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 type AdminSidebarProps = {
   isDark: boolean;
+  isMobileOpen?: boolean;
   activeItem?:
     | "dashboard"
     | "results"
@@ -116,22 +122,28 @@ type AdminSidebarProps = {
     | "violations"
     | "settings"
     | "notifications";
+  onCloseMobile?: () => void;
 };
 
-export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarProps) {
+export function AdminSidebar({
+  isDark,
+  activeItem = "dashboard",
+  isMobileOpen = false,
+  onCloseMobile,
+}: AdminSidebarProps) {
   const router = useRouter();
   const branding = useAdminBranding();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
-    if (showLogoutModal) {
+    if (showLogoutModal || isMobileOpen) {
       document.body.style.overflow = "hidden";
     }
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [showLogoutModal]);
+  }, [showLogoutModal, isMobileOpen]);
 
   useEffect(() => {
     const routes = [
@@ -149,16 +161,14 @@ export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarP
     }
   }, [router]);
 
-  return (
-    <aside
-      className={`sticky top-0 hidden h-screen w-[281px] shrink-0 overflow-hidden rounded-br-3xl border lg:block ${
-        isDark
-          ? "border-slate-700 bg-slate-950"
-          : "border-slate-200 bg-[#f9fafb]"
-      }`}
-    >
+  const handleNavigate = () => {
+    onCloseMobile?.();
+  };
+
+  const sidebarContent = (
+    <>
       <div
-        className={`flex h-[76px] items-center gap-1.5 pl-[16px] ${
+        className={`flex h-[76px] items-center justify-between gap-1.5 pl-[16px] pr-4 ${
           isDark ? "bg-slate-900" : "bg-[#171d39]"
         }`}
       >
@@ -168,74 +178,37 @@ export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarP
         ) : (
           <BrandMark />
         )}
+        <button
+          type="button"
+          onClick={onCloseMobile}
+          className="flex size-9 items-center justify-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white lg:hidden"
+          aria-label="Close sidebar"
+        >
+          <CloseIcon />
+        </button>
       </div>
 
       <div className="flex h-[calc(100vh-76px)] flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto px-[31px] pb-6 pt-8 xl:pt-[54px]">
           <div className="space-y-3 xl:space-y-[18px]">
-            <AdminSidebarItem
-              label="Dashboard"
-              icon={<DashboardIcon />}
-              href="/admin"
-              active={activeItem === "dashboard"}
-              isDark={isDark}
-            />
-            <AdminSidebarItem
-              label="Results & Review"
-              icon={<ResultsIcon />}
-              href="/admin/results-review"
-              active={activeItem === "results"}
-              isDark={isDark}
-            />
-            <AdminSidebarItem
-              label="Create Test"
-              icon={<CreateIcon />}
-              href="/admin/create-test"
-              active={activeItem === "create"}
-              isDark={isDark}
-            />
-            <AdminSidebarItem
-              label="Test List"
-              icon={<ListIcon />}
-              href="/admin/test-list"
-              active={activeItem === "list"}
-              isDark={isDark}
-            />
-            <AdminSidebarItem
-              label="Candidate"
-              icon={<CandidateIcon />}
-              href="/admin/candidate"
-              active={activeItem === "candidate"}
-              isDark={isDark}
-            />
-            <AdminSidebarItem
-              label="Violations Log"
-              icon={<ViolationIcon />}
-              href="/admin/violations-log"
-              active={activeItem === "violations"}
-              isDark={isDark}
-            />
-            <AdminSidebarItem
-              label="Notifications"
-              icon={<NotificationIcon />}
-              href="/admin/notifications"
-              active={activeItem === "notifications"}
-              isDark={isDark}
-            />
-            <AdminSidebarItem
-              label="Settings"
-              icon={<SettingsIcon />}
-              href="/admin/settings"
-              active={activeItem === "settings"}
-              isDark={isDark}
-            />
+            <AdminSidebarItem label="Dashboard" icon={<DashboardIcon />} href="/admin" onClick={handleNavigate} active={activeItem === "dashboard"} isDark={isDark} />
+            <AdminSidebarItem label="Results & Review" icon={<ResultsIcon />} href="/admin/results-review" onClick={handleNavigate} active={activeItem === "results"} isDark={isDark} />
+            <AdminSidebarItem label="Create Test" icon={<CreateIcon />} href="/admin/create-test" onClick={handleNavigate} active={activeItem === "create"} isDark={isDark} />
+            <AdminSidebarItem label="Test List" icon={<ListIcon />} href="/admin/test-list" onClick={handleNavigate} active={activeItem === "list"} isDark={isDark} />
+            <AdminSidebarItem label="Candidate" icon={<CandidateIcon />} href="/admin/candidate" onClick={handleNavigate} active={activeItem === "candidate"} isDark={isDark} />
+            <AdminSidebarItem label="Violations Log" icon={<ViolationIcon />} href="/admin/violations-log" onClick={handleNavigate} active={activeItem === "violations"} isDark={isDark} />
+            <AdminSidebarItem label="Notifications" icon={<NotificationIcon />} href="/admin/notifications" onClick={handleNavigate} active={activeItem === "notifications"} isDark={isDark} />
+            <AdminSidebarItem label="Settings" icon={<SettingsIcon />} href="/admin/settings" onClick={handleNavigate} active={activeItem === "settings"} isDark={isDark} />
           </div>
         </div>
 
         <div className="border-t border-black/5 px-[31px] py-5 dark:border-white/10">
           <button
             type="button"
-            onClick={() => setShowLogoutModal(true)}
+            onClick={() => {
+              onCloseMobile?.();
+              setShowLogoutModal(true);
+            }}
             className={`flex items-center gap-1.5 px-4 transition ${
               isDark ? "text-red-400 hover:text-red-300" : "text-red-600 hover:text-red-700"
             }`}
@@ -245,14 +218,46 @@ export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarP
           </button>
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <>
+      <aside
+        className={`sticky top-0 hidden h-screen w-[281px] shrink-0 overflow-hidden rounded-br-3xl border lg:block ${
+          isDark ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-[#f9fafb]"
+        }`}
+      >
+        {sidebarContent}
+      </aside>
+
+      {isMobileOpen ? (
+        <div className="fixed inset-0 z-[110] lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-[#0f172a]/55 backdrop-blur-[2px]"
+            onClick={onCloseMobile}
+            aria-label="Close sidebar overlay"
+          />
+          <aside
+            className={`absolute left-0 top-0 h-screen w-[281px] overflow-hidden border-r shadow-[0_24px_80px_rgba(15,23,42,0.32)] ${
+              isDark ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-[#f9fafb]"
+            }`}
+          >
+            {sidebarContent}
+          </aside>
+        </div>
+      ) : null}
 
       {typeof document !== "undefined" && showLogoutModal
         ? createPortal(
             <div className="fixed inset-x-0 inset-y-0 z-[120] overflow-y-auto bg-[#0f172a]/65 px-4 py-6 backdrop-blur-[2px] sm:px-6 lg:px-8">
               <div className="flex min-h-full items-center justify-center">
-                <div className={`w-full max-w-[440px] rounded-[14px] border p-7 shadow-[0_24px_80px_rgba(15,23,42,0.38)] ${
-                isDark ? "border-slate-700 bg-slate-900" : "border-[#dbe3ef] bg-white"
-              }`}>
+                <div
+                  className={`w-full max-w-[440px] rounded-[14px] border p-7 shadow-[0_24px_80px_rgba(15,23,42,0.38)] ${
+                    isDark ? "border-slate-700 bg-slate-900" : "border-[#dbe3ef] bg-white"
+                  }`}
+                >
                   <h3 className={`text-[30px] font-semibold tracking-[-0.45px] [zoom:0.58] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
                     Confirm Logout
                   </h3>
@@ -264,7 +269,7 @@ export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarP
                       onClick={() => {
                         clearAdminToken();
                         setShowLogoutModal(false);
-                        router.push("/admin");
+                        router.replace("/");
                       }}
                     >
                       Logout
@@ -276,7 +281,6 @@ export function AdminSidebar({ isDark, activeItem = "dashboard" }: AdminSidebarP
             document.body
           )
         : null}
-    </aside>
+    </>
   );
 }
-

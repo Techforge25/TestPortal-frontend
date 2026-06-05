@@ -7,6 +7,7 @@ type AdminSidebarItemProps = {
   active?: boolean;
   isDark?: boolean;
   href?: string;
+  onClick?: () => void;
 };
 
 export function AdminSidebarItem({
@@ -15,6 +16,7 @@ export function AdminSidebarItem({
   active = false,
   isDark = false,
   href,
+  onClick,
 }: AdminSidebarItemProps) {
   const classes = `flex h-11 w-full items-center justify-between rounded-[8px] px-4 transition ${
     active
@@ -49,14 +51,14 @@ export function AdminSidebarItem({
 
   if (href) {
     return (
-      <Link href={href} prefetch className={classes}>
+      <Link href={href} prefetch className={classes} onClick={onClick}>
         {content}
       </Link>
     );
   }
 
   return (
-    <button type="button" className={classes}>
+    <button type="button" className={classes} onClick={onClick}>
       {content}
     </button>
   );

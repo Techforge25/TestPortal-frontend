@@ -62,7 +62,18 @@ type AdminTopHeaderProps = {
   isDark: boolean;
   onToggleTheme: () => void;
   currentPage?: string;
+  onOpenSidebar?: () => void;
 };
+
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="size-5">
+      <path d="M4 7H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M4 12H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M4 17H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 function SunIcon() {
   return (
@@ -98,7 +109,7 @@ function DoubleCheckIcon() {
   );
 }
 
-export function AdminTopHeader({ isDark, onToggleTheme, currentPage = "Dashboard" }: AdminTopHeaderProps) {
+export function AdminTopHeader({ isDark, onToggleTheme, currentPage = "Dashboard", onOpenSidebar }: AdminTopHeaderProps) {
   const router = useRouter();
   const profile = useAdminProfile();
   const token = getAdminToken();
@@ -189,7 +200,19 @@ export function AdminTopHeader({ isDark, onToggleTheme, currentPage = "Dashboard
           : "border-[#e3e7ee] bg-[#f2f5ff]"
       }`}
     >
-      <div className="flex items-center gap-2 text-base">
+      <div className="flex items-center gap-3 text-base">
+        <button
+          type="button"
+          onClick={onOpenSidebar}
+          className={`flex size-10 items-center justify-center rounded-full border lg:hidden ${
+            isDark
+              ? "border-slate-600 bg-slate-800 text-slate-100"
+              : "border-[#cbd5e1] bg-white text-[#1f3a8a]"
+          }`}
+          aria-label="Open sidebar"
+        >
+          <MenuIcon />
+        </button>
         <span className={isDark ? "text-slate-300" : "text-slate-600"}>Admin</span>
         <ChevronRight />
         <span className={`font-semibold ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>

@@ -77,8 +77,8 @@ const topFields: FieldConfig[] = [
   { key: "workExperience", label: "Work Experience", placeholder: "Frontend Developer", full: true },
   { key: "startDate", label: "Start Date", placeholder: "dd/mm/yyyy" },
   { key: "endDate", label: "End Date", placeholder: "dd/mm/yyyy" },
-  { key: "currentSalary", label: "Current Salary", placeholder: "80,000" },
-  { key: "expectedSalary", label: "Expected Salary", placeholder: "120,000" },
+  // { key: "currentSalary", label: "Current Salary", placeholder: "80,000" },
+  // { key: "expectedSalary", label: "Expected Salary", placeholder: "120,000" },
 ];
 
 const bottomFields: FieldConfig[] = [
@@ -678,12 +678,12 @@ function setValue(key: keyof FormState, value: string) {
       setError("");
       return;
     }
-    if (!/^[0-9\s,.]+$/.test(form.currentSalary.trim())) {
-      nextFieldErrors.currentSalary = "Current Salary must contain only numbers.";
-      setFieldErrors(nextFieldErrors);
-      setError("");
-      return;
-    }
+    // if (!/^[0-9\s,.]+$/.test(form.currentSalary.trim())) {
+    //   nextFieldErrors.currentSalary = "Current Salary must contain only numbers.";
+    //   setFieldErrors(nextFieldErrors);
+    //   setError("");
+    //   return;
+    // }
     if (!/^[0-9\s,.]+$/.test(form.expectedSalary.trim())) {
       nextFieldErrors.expectedSalary = "Expected Salary must contain only numbers.";
       setFieldErrors(nextFieldErrors);

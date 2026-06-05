@@ -1,5 +1,6 @@
 const ADMIN_TOKEN_KEY = "admin_auth_token";
 const ADMIN_TOKEN_COOKIE = "admin_auth_token";
+const ADMIN_AUTH_EVENT = "admin-auth-updated";
 const ONE_DAY_SECONDS = 60 * 60 * 24;
 const THIRTY_DAYS_SECONDS = ONE_DAY_SECONDS * 30;
 
@@ -24,6 +25,11 @@ function writeCookie(name: string, value: string, maxAgeSeconds: number) {
 function clearCookie(name: string) {
   if (typeof document === "undefined") return;
   document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
+}
+
+function emitAdminAuthChange() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(ADMIN_AUTH_EVENT));
 }
 
 export function getAdminToken(): string | null {
@@ -52,6 +58,7 @@ export function setAdminToken(token: string) {
   window.localStorage.setItem(ADMIN_TOKEN_KEY, normalized);
   window.sessionStorage.setItem(ADMIN_TOKEN_KEY, normalized);
   writeCookie(ADMIN_TOKEN_COOKIE, normalized, THIRTY_DAYS_SECONDS);
+  emitAdminAuthChange();
 }
 
 export function clearAdminToken() {
@@ -59,8 +66,27 @@ export function clearAdminToken() {
   window.localStorage.removeItem(ADMIN_TOKEN_KEY);
   window.sessionStorage.removeItem(ADMIN_TOKEN_KEY);
   clearCookie(ADMIN_TOKEN_COOKIE);
+  emitAdminAuthChange();
 }
 
 export function isAdminAuthenticated(): boolean {
   return Boolean(getAdminToken());
+}
+
+export function subscribeAdminAuth(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === null || event.key === ADMIN_TOKEN_KEY) {
+      callback();
+    }
+  };
+  const onAuthEvent = () => callback();
+
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(ADMIN_AUTH_EVENT, onAuthEvent);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(ADMIN_AUTH_EVENT, onAuthEvent);
+  };
 }

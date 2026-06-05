@@ -144,12 +144,31 @@ function SummaryCard({
   );
 }
 
+function ReviewsTableLoader({ isDark }: { isDark: boolean }) {
+  return (
+    <div className="flex min-h-[280px] items-center justify-center">
+      <div
+        className={`flex min-w-[220px] flex-col items-center gap-3 rounded-[16px] border px-6 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.14)] ${
+          isDark ? "border-slate-700 bg-slate-900" : "border-[#dbe3ef] bg-white"
+        }`}
+      >
+        <div
+          className={`size-11 animate-spin rounded-full border-[3px] border-t-transparent ${
+            isDark ? "border-slate-300 border-t-transparent" : "border-[#1f3a8a] border-t-transparent"
+          }`}
+        />
+        <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>Loading reviews...</p>
+      </div>
+    </div>
+  );
+}
+
 type AdminResultsReviewScreenProps = {
   initialThemeDark?: boolean;
 };
 
 export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResultsReviewScreenProps) {
-  const { isDark, toggleTheme } = useAdminTheme(initialThemeDark);
+  const { isDark } = useAdminTheme(initialThemeDark);
   const [token, setToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ReviewTab>("all");
   const [query, setQuery] = useState("");
@@ -158,6 +177,7 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
   const [summary, setSummary] = useState({ pending: 0, reviewedToday: 0, passed: 0, failed: 0 });
   const [error, setError] = useState("");
   const [authError, setAuthError] = useState("");
+  const [isLoadingRows, setIsLoadingRows] = useState(false);
   const pageSize = 8;
 
   const filteredRows = useMemo(() => rows, [rows]);
@@ -187,6 +207,7 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
 
   const loadRows = useCallback(async () => {
     if (!token) return;
+    setIsLoadingRows(true);
     try {
       const response = await listAdminReviews(token, { tab: activeTab, search: query });
       const nextRows = response.rows || [];
@@ -198,6 +219,8 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
     } catch (fetchError) {
       const message = fetchError instanceof Error ? fetchError.message : "Failed to load reviews";
       setError(message);
+    } finally {
+      setIsLoadingRows(false);
     }
   }, [activeTab, query, token]);
 
@@ -291,82 +314,86 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
 
               <div className="overflow-x-auto">
                 {authError || error ? <p className="mb-3 text-sm text-red-600">{authError || error}</p> : null}
-                <table className="w-full min-w-[1080px] border-separate border-spacing-y-2">
-                  <thead>
-                    <tr className={`${isDark ? "bg-slate-800 text-slate-300" : "bg-[#f3f4f6] text-[#475569]"}`}>
-                      <th className="rounded-l-[8px] px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Candidate</th>
-                      <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Test Info</th>
-                      <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Submitted</th>
-                      <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">MCQ Score</th>
-                      <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Coding Status</th>
-                      <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Status</th>
-                      <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Violations</th>
-                      <th className="rounded-r-[8px] px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedRows.map((row, index) => (
-                      <tr key={`${row.id}-${index}`}>
-                        <td className={`px-4 py-2 text-center text-[18px] font-medium [zoom:0.84] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
-                          {row.candidate}
-                        </td>
-                        <td className={`px-4 py-2 text-center text-[18px] leading-6 [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
-                          {row.testInfo}
-                        </td>
-                        <td className={`px-4 py-2 text-center text-[16px] leading-5 [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#64748b]"}`}>
-                          {row.submitted ? new Date(row.submitted).toLocaleString() : "-"}
-                        </td>
-                        <td className={`px-4 py-2 text-center text-[18px] [zoom:0.84] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
-                          {row.score}
-                        </td>
-                        <td className="px-4 py-2 text-center">
-                          <span
-                            className={`inline-flex min-w-[88px] items-center justify-center rounded-full border px-4 py-1 text-[16px] [zoom:0.84] ${
-                              row.codingStatus === "Reviewed"
-                                ? "border-[#22c55e] bg-[#f0fdf4] text-[#16a34a]"
-                                : "border-[#cbd5e1] bg-[#f8fafc] text-[#475569]"
-                            }`}
-                          >
-                            {row.codingStatus}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-center">
-                          {(() => {
-                            const statusValue = row.reviewStatus || "Pending";
-                            return (
-                              <span
-                                className={`inline-flex min-w-[110px] items-center justify-center rounded-full border px-4 py-1 text-sm font-medium ${getReviewStatusBadge(
-                                  statusValue as AdminReviewRow["reviewStatus"],
-                                  isDark
-                                )}`}
-                              >
-                                {statusValue}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td className="px-4 py-2 text-center">
-                          {row.violations === 0 ? (
-                            <span className={`text-[20px] [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#64748b]"}`}>-</span>
-                          ) : (
-                            <span className="inline-flex min-w-[88px] items-center justify-center rounded-[8px] border border-[#ef4444] bg-[#fef2f2] px-3 py-[2px] text-[16px] text-[#dc2626] [zoom:0.84]">
-                              {`${row.violations} Detected`}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-center">
-                          <Link
-                            href={`/admin/results-review/review?submissionId=${row.id}`}
-                            className="inline-flex h-7 min-w-[90px] items-center justify-center gap-1 rounded-[8px] border border-[#3b82f6] bg-[#eff6ff] px-3 text-[16px] text-[#2563eb] [zoom:0.84]"
-                          >
-                            {row.action}
-                            <ReviewArrow />
-                          </Link>
-                        </td>
+                {isLoadingRows ? (
+                  <ReviewsTableLoader isDark={isDark} />
+                ) : (
+                  <table className="w-full min-w-[1080px] border-separate border-spacing-y-2">
+                    <thead>
+                      <tr className={`${isDark ? "bg-slate-800 text-slate-300" : "bg-[#f3f4f6] text-[#475569]"}`}>
+                        <th className="rounded-l-[8px] px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Candidate</th>
+                        <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Test Info</th>
+                        <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Submitted</th>
+                        <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">MCQ Score</th>
+                        <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Coding Status</th>
+                        <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Status</th>
+                        <th className="px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Violations</th>
+                        <th className="rounded-r-[8px] px-4 py-3 text-center text-[18px] font-medium [zoom:0.84]">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {paginatedRows.map((row, index) => (
+                        <tr key={`${row.id}-${index}`}>
+                          <td className={`px-4 py-2 text-center text-[18px] font-medium [zoom:0.84] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
+                            {row.candidate}
+                          </td>
+                          <td className={`px-4 py-2 text-center text-[18px] leading-6 [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#475569]"}`}>
+                            {row.testInfo}
+                          </td>
+                          <td className={`px-4 py-2 text-center text-[16px] leading-5 [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#64748b]"}`}>
+                            {row.submitted ? new Date(row.submitted).toLocaleString() : "-"}
+                          </td>
+                          <td className={`px-4 py-2 text-center text-[18px] [zoom:0.84] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
+                            {row.score}
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <span
+                              className={`inline-flex min-w-[88px] items-center justify-center rounded-full border px-4 py-1 text-[16px] [zoom:0.84] ${
+                                row.codingStatus === "Reviewed"
+                                  ? "border-[#22c55e] bg-[#f0fdf4] text-[#16a34a]"
+                                  : "border-[#cbd5e1] bg-[#f8fafc] text-[#475569]"
+                              }`}
+                            >
+                              {row.codingStatus}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            {(() => {
+                              const statusValue = row.reviewStatus || "Pending";
+                              return (
+                                <span
+                                  className={`inline-flex min-w-[110px] items-center justify-center rounded-full border px-4 py-1 text-sm font-medium ${getReviewStatusBadge(
+                                    statusValue as AdminReviewRow["reviewStatus"],
+                                    isDark
+                                  )}`}
+                                >
+                                  {statusValue}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            {row.violations === 0 ? (
+                              <span className={`text-[20px] [zoom:0.84] ${isDark ? "text-slate-300" : "text-[#64748b]"}`}>-</span>
+                            ) : (
+                              <span className="inline-flex min-w-[88px] items-center justify-center rounded-[8px] border border-[#ef4444] bg-[#fef2f2] px-3 py-[2px] text-[16px] text-[#dc2626] [zoom:0.84]">
+                                {`${row.violations} Detected`}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <Link
+                              href={`/admin/results-review/review?submissionId=${row.id}`}
+                              className="inline-flex h-7 min-w-[90px] items-center justify-center gap-1 rounded-[8px] border border-[#3b82f6] bg-[#eff6ff] px-3 text-[16px] text-[#2563eb] [zoom:0.84]"
+                            >
+                              {row.action}
+                              <ReviewArrow />
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
