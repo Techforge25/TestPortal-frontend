@@ -559,6 +559,15 @@ export function CandidateRegistrationScreen() {
   }, [form]);
 
   useEffect(() => {
+    setFieldErrors((prev) => {
+      if (!prev.workExperience) return prev;
+      const next = { ...prev };
+      delete next.workExperience;
+      return next;
+    });
+  }, [form.workExperience]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     const syncDraft = () => {
