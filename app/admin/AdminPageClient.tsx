@@ -19,7 +19,7 @@ export default function AdminPageClient({ initialThemeDark = false }: AdminPageC
   const storedToken = isHydrated ? getAdminToken() : null;
   const isLoggedIn = Boolean(storedToken);
 
-  async function handleLogin(payload: { email: string; password: string }) {
+  async function handleLogin(payload: { email: string; password: string; rememberMe: boolean }) {
     const response = await loginAdmin(payload.email, payload.password);
     setAdminToken(response.token);
   }

@@ -4,13 +4,52 @@ import { useState } from "react";
 import { AuthTextField } from "@/components/shared/auth/AuthTextField";
 import { AppButton } from "@/components/shared/ui/AppButton";
 
+const ADMIN_REMEMBER_ME_KEY = "admin_remember_me_v1";
+
+function readRememberedAdminCredentials() {
+  if (typeof window === "undefined") {
+    return { email: "", password: "", rememberMe: false };
+  }
+  try {
+    const raw = window.localStorage.getItem(ADMIN_REMEMBER_ME_KEY);
+    if (!raw) {
+      return { email: "", password: "", rememberMe: false };
+    }
+    const parsed = JSON.parse(raw) as { email?: string; password?: string };
+    return {
+      email: String(parsed?.email || ""),
+      password: String(parsed?.password || ""),
+      rememberMe: Boolean(parsed?.email || parsed?.password),
+    };
+  } catch {
+    return { email: "", password: "", rememberMe: false };
+  }
+}
+
+function persistRememberedAdminCredentials(payload: { email: string; password: string; rememberMe: boolean }) {
+  if (typeof window === "undefined") return;
+  if (!payload.rememberMe) {
+    window.localStorage.removeItem(ADMIN_REMEMBER_ME_KEY);
+    return;
+  }
+  window.localStorage.setItem(
+    ADMIN_REMEMBER_ME_KEY,
+    JSON.stringify({
+      email: payload.email.trim(),
+      password: payload.password,
+    })
+  );
+}
+
 type AdminSignInScreenProps = {
-  onSubmit: (payload: { email: string; password: string }) => Promise<void> | void;
+  onSubmit: (payload: { email: string; password: string; rememberMe: boolean }) => Promise<void> | void;
 };
 
 export function AdminSignInScreen({ onSubmit }: AdminSignInScreenProps) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [remembered] = useState(() => readRememberedAdminCredentials());
+  const [email, setEmail] = useState(remembered.email);
+  const [password, setPassword] = useState(remembered.password);
+  const [rememberMe, setRememberMe] = useState(remembered.rememberMe);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -22,7 +61,9 @@ export function AdminSignInScreen({ onSubmit }: AdminSignInScreenProps) {
     setIsSubmitting(true);
     setError("");
     try {
-      await onSubmit({ email: email.trim(), password });
+      const payload = { email: email.trim(), password, rememberMe };
+      await onSubmit(payload);
+      persistRememberedAdminCredentials(payload);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Login failed";
       setError(message);
@@ -52,7 +93,12 @@ export function AdminSignInScreen({ onSubmit }: AdminSignInScreenProps) {
 
       <div className="mt-4 flex items-center justify-between">
         <label className="flex items-center gap-2 text-slate-700">
-          <input type="checkbox" className="size-4 accent-[#1f3a8a]" />
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+            className="size-4 accent-[#1f3a8a]"
+          />
           Remember me
         </label>
         {/* <button clsassName="text-[#1f3a8a]" type="button">

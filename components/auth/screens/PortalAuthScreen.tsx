@@ -20,7 +20,7 @@ export function PortalAuthScreen() {
   const [role, setRole] = useState<Role>("admin");
   const router = useRouter();
 
-  const handleAdminSubmit = async (payload: { email: string; password: string }) => {
+  const handleAdminSubmit = async (payload: { email: string; password: string; rememberMe: boolean }) => {
     const response = await loginAdmin(payload.email, payload.password);
     setAdminToken(response.token);
     router.replace("/admin");
