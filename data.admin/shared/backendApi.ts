@@ -413,6 +413,7 @@ export type CandidateProfilePayload = {
   positionAppliedFor: string;
   residentialAddress: string;
   workExperience: string;
+  designation?: string;
   startDate: string;
   endDate: string;
   currentSalary: string;

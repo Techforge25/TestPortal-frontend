@@ -284,6 +284,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
             { label: "Position Applied", value: detail.candidateProfile.positionAppliedFor },
             { label: "Address", value: detail.candidateProfile.residentialAddress },
             { label: "Experience", value: detail.candidateProfile.workExperience },
+            { label: "Designation", value: detail.candidateProfile.designation || "-" },
             // { label: "Start Date", value: detail.candidateProfile.startDate },
             // { label: "End Date", value: detail.candidateProfile.endDate },
             // { label: "Current Salary", value: detail.candidateProfile.currentSalary },
@@ -489,6 +490,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                 ${field("Position Applied For", detail.candidateProfile.positionAppliedFor || "")}
                 ${field("Residential Address", detail.candidateProfile.residentialAddress || "")}
                 ${field("Work Experience", detail.candidateProfile.workExperience || "")}
+                ${field("Your Designation", detail.candidateProfile.designation || "")}
               </div>
 
               <div class="section grid-2">
@@ -1088,6 +1090,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                 ["Position Applied For", detail.candidateProfile.positionAppliedFor],
                 ["Residential Address", detail.candidateProfile.residentialAddress],
                 ["Work Experience", detail.candidateProfile.workExperience],
+                ["Your Designation", detail.candidateProfile.designation || "-"],
               ].map(([label, value]) => (
                 <div key={label} className="md:col-span-2">
                   <p className={`mb-2 text-sm font-medium ${isDark ? "text-slate-200" : "text-[#0f172a]"}`}>{label}</p>

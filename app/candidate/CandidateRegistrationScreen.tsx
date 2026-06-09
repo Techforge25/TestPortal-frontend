@@ -29,6 +29,7 @@ type FormState = {
   positionAppliedFor: string;
   residentialAddress: string;
   workExperience: string;
+  designation: string;
   startDate: string;
   endDate: string;
   currentSalary: string;
@@ -51,6 +52,7 @@ const initialState: FormState = {
   positionAppliedFor: "",
   residentialAddress: "",
   workExperience: "",
+  designation: "",
   startDate: "",
   endDate: "",
   currentSalary: "",
@@ -75,6 +77,7 @@ const topFields: FieldConfig[] = [
     full: true,
   },
   { key: "workExperience", label: "Work Experience", placeholder: "Select Work Experience", full: true },
+  { key: "designation", label: "Previous Job Designation", placeholder: "Enter your previous job description", full: true },
   // { key: "startDate", label: "Start Date", placeholder: "dd/mm/yyyy" },
   // { key: "endDate", label: "End Date", placeholder: "dd/mm/yyyy" },
   // { key: "currentSalary", label: "Current Salary", placeholder: "80,000" },
@@ -619,6 +622,7 @@ export function CandidateRegistrationScreen() {
           residentialAddress:
             prefill.candidateProfile?.residentialAddress || prev.residentialAddress,
           workExperience: prefill.candidateProfile?.workExperience || prev.workExperience,
+          designation: prefill.candidateProfile?.designation || prev.designation,
           startDate: normalizeDateForInput(prefill.candidateProfile?.startDate || prev.startDate),
           endDate: normalizeDateForInput(prefill.candidateProfile?.endDate || prev.endDate),
           currentSalary: prefill.candidateProfile?.currentSalary || prev.currentSalary,
@@ -646,6 +650,10 @@ function setValue(key: keyof FormState, value: string) {
       return;
     }
     if (key === "positionAppliedFor") {
+      setForm((prev) => ({ ...prev, [key]: sanitizePositionField(value) }));
+      return;
+    }
+    if (key === "designation") {
       setForm((prev) => ({ ...prev, [key]: sanitizePositionField(value) }));
       return;
     }
@@ -762,6 +770,7 @@ function setValue(key: keyof FormState, value: string) {
           positionAppliedFor: form.positionAppliedFor,
           residentialAddress: form.residentialAddress,
           workExperience: form.workExperience,
+          designation: form.designation.trim(),
           startDate: normalizeDateForApi(form.startDate),
           endDate: normalizeDateForApi(form.endDate),
           currentSalary: form.currentSalary.trim(),
