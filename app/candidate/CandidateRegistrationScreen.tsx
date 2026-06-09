@@ -75,8 +75,8 @@ const topFields: FieldConfig[] = [
     full: true,
   },
   { key: "workExperience", label: "Work Experience", placeholder: "Select Work Experience", full: true },
-  { key: "startDate", label: "Start Date", placeholder: "dd/mm/yyyy" },
-  { key: "endDate", label: "End Date", placeholder: "dd/mm/yyyy" },
+  // { key: "startDate", label: "Start Date", placeholder: "dd/mm/yyyy" },
+  // { key: "endDate", label: "End Date", placeholder: "dd/mm/yyyy" },
   // { key: "currentSalary", label: "Current Salary", placeholder: "80,000" },
   // { key: "expectedSalary", label: "Expected Salary", placeholder: "120,000" },
 ];
@@ -721,22 +721,22 @@ function setValue(key: keyof FormState, value: string) {
     if (!Number.isFinite(candidateAge) || candidateAge < 16) {
       nextFieldErrors.dateOfBirth = "Candidate age must be at least 16 years.";
     }
-    if (form.startDate && form.endDate) {
-      const start = parseDateToTimestamp(form.startDate);
-      const end = parseDateToTimestamp(form.endDate);
-      if (Number.isFinite(start) && Number.isFinite(end) && end < start) {
-        nextFieldErrors.endDate = "End Date cannot be earlier than Start Date.";
-      }
-      if (form.expectedJoiningDate) {
-        const joining = parseDateToTimestamp(form.expectedJoiningDate);
-        if (Number.isFinite(joining)) {
-          if (joining <= start || joining <= end) {
-            nextFieldErrors.expectedJoiningDate =
-              "Expected Date of Joining must be later than Start Date and End Date.";
-          }
-        }
-      }
-    }
+    // if (form.startDate && form.endDate) {
+    //   const start = parseDateToTimestamp(form.startDate);
+    //   const end = parseDateToTimestamp(form.endDate);
+    //   if (Number.isFinite(start) && Number.isFinite(end) && end < start) {
+    //     nextFieldErrors.endDate = "End Date cannot be earlier than Start Date.";
+    //   }
+    //   if (form.expectedJoiningDate) {
+    //     const joining = parseDateToTimestamp(form.expectedJoiningDate);
+    //     if (Number.isFinite(joining)) {
+    //       if (joining <= start || joining <= end) {
+    //         nextFieldErrors.expectedJoiningDate =
+    //           "Expected Date of Joining must be later than Start Date and End Date.";
+    //       }
+    //     }
+    //   }
+    // }
 
     if (Object.keys(nextFieldErrors).length > 0) {
       delete nextFieldErrors.workExperience;
@@ -808,140 +808,146 @@ function setValue(key: keyof FormState, value: string) {
         </header>
 
         <article className="mt-5 rounded-[24px] border border-[#e2e8f0] bg-white px-4 py-8 sm:px-6">
-          <div className="text-center">
-            <h1 className="text-[22px] font-semibold tracking-[-0.33px] text-[#0f172a]">Candidate Registration</h1>
-            <p className="mt-2 text-base text-[#666c77]">Enter Your Details To Begin The Assessment</p>
-          </div>
-
-          <div className="mt-8 grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
-            {topFields.map((field) => (
-              <div key={field.key} className={field.full ? "md:col-span-2" : ""}>
-                {field.key === "maritalStatus" ? (
-                  <>
-                    <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
-                    <AppDropdown
-                      value={form.maritalStatus || ""}
-                      onChange={(value) => setValue("maritalStatus", value)}
-                      options={maritalStatusOptions}
-                      className="h-[52px]"
-                      triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
-                      menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
-                      optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                      selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
-                      chevronClassName="text-[#64748b]"
-                      ariaLabel={field.label}
-                    />
-                  </>
-                ) : field.key === "workExperience" ? (
-                  <>
-                    <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
-                    <AppDropdown
-                      value={form.workExperience || ""}
-                      onChange={(value) => setValue("workExperience", value)}
-                      options={workExperienceOptions}
-                      className="h-[52px]"
-                      triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
-                      menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
-                      optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                      selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
-                      chevronClassName="text-[#64748b]"
-                      ariaLabel={field.label}
-                    />
-                  </>
-                ) : dateFieldKeys.includes(field.key) ? (
-                  <CalendarInput
-                    label={field.label}
-                    value={form[field.key]}
-                    onChange={(value) => setValue(field.key, value)}
-                    placeholder={field.placeholder}
-                  />
-                ) : (
-                  <AuthTextField
-                    label={field.label}
-                    value={form[field.key]}
-                    onChange={(value) => setValue(field.key, value)}
-                    placeholder={field.placeholder}
-                    type={field.type || "text"}
-                    labelClassName="mb-3 text-[18px] text-[#0f172a]"
-                    inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
-                  />
-                )}
-                {field.key === "residentialAddress" && !allowsGlobalAddress ? (
-                  <p className="mt-2 text-xs text-[#64748b]">
-                    Enter the candidate&apos;s current Pakistani residing address. Non-Pakistani addresses are allowed only for remote or permanent work-from-home roles.
-                  </p>
-                ) : null}
-                {field.key !== "workExperience" && fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
-              </div>
-            ))}
-          </div>
-
-          <hr className="my-6 border-t border-[#e2e8f0]" />
-
-          <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
-            {bottomFields.map((field) => (
-              <div key={field.key}>
-                {field.key === "shiftComfortable" ? (
-                  <>
-                    <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
-                    <AppDropdown
-                      value={form.shiftComfortable || ""}
-                      onChange={(value) => setValue("shiftComfortable", value)}
-                      options={shiftOptions}
-                      className="h-[52px]"
-                      triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
-                      menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
-                      optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                      selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
-                      chevronClassName="text-[#64748b]"
-                      ariaLabel={field.label}
-                    />
-                  </>
-                ) : dateFieldKeys.includes(field.key) ? (
-                  <CalendarInput
-                    label={field.label}
-                    value={form[field.key]}
-                    onChange={(value) => setValue(field.key, value)}
-                    placeholder={field.placeholder}
-                  />
-                ) : (
-                  <AuthTextField
-                    label={field.label}
-                    value={form[field.key]}
-                    onChange={(value) => setValue(field.key, value)}
-                    placeholder={field.placeholder}
-                    type={field.type || "text"}
-                    labelClassName="mb-3 text-[18px] text-[#0f172a]"
-                    inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
-                  />
-                )}
-                {field.key !== "workExperience" && fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
-              </div>
-            ))}
-          </div>
-
-          <AppButton
-            type="button"
-            variant="primary"
-            size="lg"
-            className="mt-6 w-full rounded-[10px]"
-            leftIcon={<RocketIcon />}
-            onClick={handleStartTest}
-            disabled={isSubmitting}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleStartTest();
+            }}
           >
-            Start Test
-          </AppButton>
-          {Object.keys(fieldErrors).length > 0 ? (
-            <div className="mt-3 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3">
-              <p className="text-sm font-semibold text-red-700">Please fix these fields:</p>
-              <ul className="mt-2 space-y-1 text-sm text-red-600">
-                {Object.entries(fieldErrors).map(([key, message]) =>
-                  key !== "workExperience" && message ? <li key={key}>{message}</li> : null
-                )}
-              </ul>
+            <div className="text-center">
+              <h1 className="text-[22px] font-semibold tracking-[-0.33px] text-[#0f172a]">Candidate Registration</h1>
+              <p className="mt-2 text-base text-[#666c77]">Enter Your Details To Begin The Assessment</p>
             </div>
-          ) : null}
-          {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+
+            <div className="mt-8 grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+              {topFields.map((field) => (
+                <div key={field.key} className={field.full ? "md:col-span-2" : ""}>
+                  {field.key === "maritalStatus" ? (
+                    <>
+                      <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
+                      <AppDropdown
+                        value={form.maritalStatus || ""}
+                        onChange={(value) => setValue("maritalStatus", value)}
+                        options={maritalStatusOptions}
+                        className="h-[52px]"
+                        triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
+                        menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
+                        optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                        selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
+                        chevronClassName="text-[#64748b]"
+                        ariaLabel={field.label}
+                      />
+                    </>
+                  ) : field.key === "workExperience" ? (
+                    <>
+                      <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
+                      <AppDropdown
+                        value={form.workExperience || ""}
+                        onChange={(value) => setValue("workExperience", value)}
+                        options={workExperienceOptions}
+                        className="h-[52px]"
+                        triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
+                        menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
+                        optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                        selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
+                        chevronClassName="text-[#64748b]"
+                        ariaLabel={field.label}
+                      />
+                    </>
+                  ) : dateFieldKeys.includes(field.key) ? (
+                    <CalendarInput
+                      label={field.label}
+                      value={form[field.key]}
+                      onChange={(value) => setValue(field.key, value)}
+                      placeholder={field.placeholder}
+                    />
+                  ) : (
+                    <AuthTextField
+                      label={field.label}
+                      value={form[field.key]}
+                      onChange={(value) => setValue(field.key, value)}
+                      placeholder={field.placeholder}
+                      type={field.type || "text"}
+                      labelClassName="mb-3 text-[18px] text-[#0f172a]"
+                      inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
+                    />
+                  )}
+                  {field.key === "residentialAddress" && !allowsGlobalAddress ? (
+                    <p className="mt-2 text-xs text-[#64748b]">
+                      Enter the candidate&apos;s current Pakistani residing address. Non-Pakistani addresses are allowed only for remote or permanent work-from-home roles.
+                    </p>
+                  ) : null}
+                  {field.key !== "workExperience" && fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
+                </div>
+              ))}
+            </div>
+
+            <hr className="my-6 border-t border-[#e2e8f0]" />
+
+            <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+              {bottomFields.map((field) => (
+                <div key={field.key}>
+                  {field.key === "shiftComfortable" ? (
+                    <>
+                      <label className="mb-3 block text-[18px] text-[#0f172a]">{field.label}</label>
+                      <AppDropdown
+                        value={form.shiftComfortable || ""}
+                        onChange={(value) => setValue("shiftComfortable", value)}
+                        options={shiftOptions}
+                        className="h-[52px]"
+                        triggerClassName="h-full rounded-[10px] border border-[#e3e7ee] bg-white px-6 text-left text-[16px] text-[#0f172a]"
+                        menuClassName="rounded-[10px] border border-[#e3e7ee] bg-white shadow-lg"
+                        optionClassName="px-4 py-2.5 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                        selectedOptionClassName="bg-[#eef2ff] text-[#1f3a8a]"
+                        chevronClassName="text-[#64748b]"
+                        ariaLabel={field.label}
+                      />
+                    </>
+                  ) : dateFieldKeys.includes(field.key) ? (
+                    <CalendarInput
+                      label={field.label}
+                      value={form[field.key]}
+                      onChange={(value) => setValue(field.key, value)}
+                      placeholder={field.placeholder}
+                    />
+                  ) : (
+                    <AuthTextField
+                      label={field.label}
+                      value={form[field.key]}
+                      onChange={(value) => setValue(field.key, value)}
+                      placeholder={field.placeholder}
+                      type={field.type || "text"}
+                      labelClassName="mb-3 text-[18px] text-[#0f172a]"
+                      inputClassName="h-[52px] rounded-[10px] border-[#e3e7ee] px-6 placeholder:text-[#9ca3af]"
+                    />
+                  )}
+                  {field.key !== "workExperience" && fieldErrors[field.key] ? <p className="mt-1 text-sm text-red-600">{fieldErrors[field.key]}</p> : null}
+                </div>
+              ))}
+            </div>
+
+            <AppButton
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="mt-6 w-full rounded-[10px]"
+              leftIcon={<RocketIcon />}
+              disabled={isSubmitting}
+            >
+              Start Test
+            </AppButton>
+            {Object.keys(fieldErrors).length > 0 ? (
+              <div className="mt-3 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm font-semibold text-red-700">Please fix these fields:</p>
+                <ul className="mt-2 space-y-1 text-sm text-red-600">
+                  {Object.entries(fieldErrors).map(([key, message]) =>
+                    key !== "workExperience" && message ? <li key={key}>{message}</li> : null
+                  )}
+                </ul>
+              </div>
+            ) : null}
+            {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+          </form>
         </article>
       </section>
 

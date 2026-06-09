@@ -23,7 +23,7 @@ export default function WelcomeUI() {
       <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl p-8 max-w-lg w-full text-center">
         
         <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
-          Hi Interviewer 👋
+          Hi Candidate 👋
         </h1>
 
         <p className="text-blue-100 text-lg mb-6">

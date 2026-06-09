@@ -47,6 +47,18 @@ function writeCachedReviews(rows: AdminReviewRow[], summary: ReviewSummary) {
   }
 }
 
+function buildReviewSummaryFromRows(
+  rows: AdminReviewRow[],
+  fallback: ReviewSummary
+): ReviewSummary {
+  return {
+    pending: fallback.pending,
+    reviewedToday: fallback.reviewedToday,
+    passed: rows.filter((row) => row.reviewStatus === "Passed").length,
+    failed: rows.filter((row) => row.reviewStatus === "Failed").length,
+  };
+}
+
 function getReviewStatusBadge(status: AdminReviewRow["reviewStatus"], isDark: boolean) {
   if (status === "Passed") {
     return isDark
@@ -205,16 +217,27 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
     setAuthError("");
   }, []);
 
+  useEffect(() => {
+    writeCachedReviews(rows, summary);
+  }, [rows, summary]);
+
+  const loadSummary = useCallback(async () => {
+    if (!token) return;
+    const response = await listAdminReviews(token, { tab: "all", search: "" });
+    const nextSummary = buildReviewSummaryFromRows(
+      response.rows || [],
+      response.summary || { pending: 0, reviewedToday: 0, passed: 0, failed: 0 }
+    );
+    setSummary(nextSummary);
+  }, [token]);
+
   const loadRows = useCallback(async () => {
     if (!token) return;
     setIsLoadingRows(true);
     try {
       const response = await listAdminReviews(token, { tab: activeTab, search: query });
       const nextRows = response.rows || [];
-      const nextSummary = response.summary || { pending: 0, reviewedToday: 0, passed: 0, failed: 0 };
       setRows(nextRows);
-      setSummary(nextSummary);
-      writeCachedReviews(nextRows, nextSummary);
       setError("");
     } catch (fetchError) {
       const message = fetchError instanceof Error ? fetchError.message : "Failed to load reviews";
@@ -229,7 +252,8 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
     // Always fetch latest rows even when cached data exists,
     // so stale/deleted submissions are not shown.
     void loadRows();
-  }, [loadRows, token]);
+    void loadSummary();
+  }, [loadRows, loadSummary, token]);
 
   useRealtimeSubscription({
     token,
@@ -237,6 +261,7 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
     onEvent: async () => {
       if (document.visibilityState === "visible") {
         await loadRows();
+        await loadSummary();
       }
     },
     enabled: Boolean(token),
@@ -247,11 +272,12 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void loadRows();
+        void loadSummary();
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [loadRows, token]);
+  }, [loadRows, loadSummary, token]);
 
   return (
     <main className={`min-h-screen ${isDark ? "bg-slate-950" : "bg-[#f8fafc]"}`}>
