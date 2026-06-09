@@ -60,18 +60,18 @@ const initialState: FormState = {
 };
 
 const topFields: FieldConfig[] = [
-  { key: "fullName", label: "Full Name", placeholder: "Ahmed Ali", full: true },
-  { key: "email", label: "Email Address", placeholder: "Ahmedali@gmail.com", type: "email" },
-  { key: "phoneNumber", label: "Phone Number", placeholder: "+923123456789", type: "tel" },
-  { key: "cnic", label: "Cnic Num", placeholder: "12345-1234567-1" },
+  { key: "fullName", label: "Full Name", placeholder: "Enter your full name ", full: true },
+  { key: "email", label: "Email Address", placeholder: "Enter your email address", type: "email" },
+  { key: "phoneNumber", label: "Phone Number", placeholder: "Your Contact Number", type: "tel" },
+  { key: "cnic", label: "Cnic Num", placeholder: "xxxxx-xxxxxxx-x" },
   { key: "maritalStatus", label: "Marital Status", placeholder: "Select Marital Status" },
-  { key: "qualification", label: "Qualification", placeholder: "BSCS" },
+  { key: "qualification", label: "Qualification", placeholder: "Qualification" },
   { key: "dateOfBirth", label: "Date of Birth", placeholder: "dd/mm/yyyy" },
-  { key: "positionAppliedFor", label: "Position Applied For", placeholder: "Front End Developer", full: true },
+  { key: "positionAppliedFor", label: "Position Applied For", placeholder: "Position you applied for", full: true },
   {
     key: "residentialAddress",
     label: "Residential Address",
-    placeholder: "401, Al-Falah Court I.I.Chundrigar Road, Karachi",
+    placeholder: "Your residential address",
     full: true,
   },
   { key: "workExperience", label: "Work Experience", placeholder: "Select Work Experience", full: true },

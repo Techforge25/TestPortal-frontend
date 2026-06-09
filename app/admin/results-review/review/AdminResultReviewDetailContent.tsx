@@ -286,8 +286,8 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
             { label: "Experience", value: detail.candidateProfile.workExperience },
             // { label: "Start Date", value: detail.candidateProfile.startDate },
             // { label: "End Date", value: detail.candidateProfile.endDate },
-            { label: "Current Salary", value: detail.candidateProfile.currentSalary },
-            { label: "Expected Salary", value: detail.candidateProfile.expectedSalary },
+            // { label: "Current Salary", value: detail.candidateProfile.currentSalary },
+            // { label: "Expected Salary", value: detail.candidateProfile.expectedSalary },
             { label: "Expected Joining Date", value: detail.candidateProfile.expectedJoiningDate },
             { label: "Shift Comfortable", value: detail.candidateProfile.shiftComfortable },
           ].filter((row) => row.value && row.value.trim().length > 0)

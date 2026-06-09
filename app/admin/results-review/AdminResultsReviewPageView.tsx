@@ -331,10 +331,16 @@ export function AdminResultsReviewScreen({ initialThemeDark = false }: AdminResu
                     setQuery(value);
                     setCurrentPage(1);
                   }}
-                  placeholder="Search Candidate"
+                  placeholder="Search candidate name, test, or status..."
                   isDark={isDark}
-                  className="h-10 w-full max-w-[240px] bg-gray-200"
-                  inputClassName="text-sm"
+                  className={`h-12 w-full max-w-[340px] rounded-[14px] border px-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] transition focus-within:-translate-y-[1px] focus-within:shadow-[0_14px_40px_rgba(31,58,138,0.14)] ${
+                    isDark
+                      ? "border-slate-600 bg-slate-800/95 focus-within:border-slate-500"
+                      : "border-[#d8e2f0] bg-white/95 focus-within:border-[#c7d2fe]"
+                  }`}
+                  inputClassName={`text-[15px] font-medium ${
+                    isDark ? "placeholder:text-slate-400" : "placeholder:text-[#9aa8c2]"
+                  }`}
                 />
               </div>
 
