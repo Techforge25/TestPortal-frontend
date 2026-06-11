@@ -354,7 +354,7 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
               <h2 className={`text-[40px] font-semibold tracking-[-0.6px] [zoom:0.55] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>
                 Test List
               </h2>
-              <div className={`mt-4 grid grid-cols-6 gap-5 px-4 py-5 text-center text-lg font-bold ${isDark ? "bg-slate-700 text-slate-300" : "bg-[#f9fafb] text-[#666c77]"}`}>
+              <div className={`mt-4 hidden grid-cols-[1.1fr_1.2fr_1.1fr_0.8fr_1fr_0.9fr] gap-5 rounded-[16px] px-4 py-5 text-center text-base font-bold md:grid ${isDark ? "bg-slate-700 text-slate-300" : "bg-[#f9fafb] text-[#666c77]"}`}>
                 <p>Candidate</p>
                 <p>Position</p>
                 <p>Test</p>
@@ -363,15 +363,60 @@ export function AdminDashboardScreen({ initialThemeDark = false }: AdminDashboar
                 <p>Date</p>
               </div>
 
-              <div className="space-y-6 pt-6">
+              <div className="space-y-4 pt-6 md:hidden">
                 {rows.map((row) => (
-                  <div key={`${row.candidate}-${row.date}`} className="grid grid-cols-6 items-center gap-5 text-center">
-                    <p className={`font-medium ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>{row.candidate}</p>
-                    <p className={isDark ? "text-slate-300" : "text-[#666c77]"}>{row.position}</p>
-                    <p className={isDark ? "text-slate-300" : "text-[#666c77]"}>{row.test}</p>
+                  <article
+                    key={`${row.candidate}-${row.date}-mobile`}
+                    className={`rounded-[18px] border p-4 ${isDark ? "border-slate-700 bg-slate-900" : "border-[#e2e8f0] bg-[#f8fafc]"}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>{row.candidate}</p>
+                        <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-[#64748b]"}`}>{row.position}</p>
+                      </div>
+                      <span
+                        className={`inline-flex min-w-[96px] items-center justify-center rounded-full border px-3 py-1 text-sm font-medium ${
+                          row.status === "Passed"
+                            ? "border-[#16a34a] bg-[#f0fdf4] text-[#16a34a]"
+                            : row.status === "Failed"
+                              ? "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]"
+                              : "border-[#bfdbfe] bg-[#eff6ff] text-[#1d4ed8]"
+                        }`}
+                      >
+                        {row.status}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div>
+                        <p className={`text-xs font-semibold uppercase tracking-wide ${isDark ? "text-slate-500" : "text-[#94a3b8]"}`}>Test</p>
+                        <p className={`mt-1 text-sm ${isDark ? "text-slate-200" : "text-[#334155]"}`}>{row.test}</p>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-semibold uppercase tracking-wide ${isDark ? "text-slate-500" : "text-[#94a3b8]"}`}>Score</p>
+                        <p className={`mt-1 text-sm font-semibold ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>{row.score}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className={`text-xs font-semibold uppercase tracking-wide ${isDark ? "text-slate-500" : "text-[#94a3b8]"}`}>Date</p>
+                        <p className={`mt-1 text-sm ${isDark ? "text-slate-300" : "text-[#64748b]"}`}>{row.date ? new Date(row.date).toLocaleDateString() : "-"}</p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="hidden space-y-5 pt-6 md:block">
+                {rows.map((row) => (
+                  <div
+                    key={`${row.candidate}-${row.date}`}
+                    className={`grid grid-cols-[1.1fr_1.2fr_1.1fr_0.8fr_1fr_0.9fr] items-center gap-5 rounded-[14px] px-4 py-4 text-center ${isDark ? "bg-slate-800/70" : "bg-white"}`}
+                  >
+                    <p className={`font-medium break-words ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>{row.candidate}</p>
+                    <p className={`break-words ${isDark ? "text-slate-300" : "text-[#666c77]"}`}>{row.position}</p>
+                    <p className={`break-words ${isDark ? "text-slate-300" : "text-[#666c77]"}`}>{row.test}</p>
                     <p className={`font-medium ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>{row.score}</p>
                     <p
-                      className={`mx-auto min-w-[102px] rounded-3xl border px-4 py-1 ${
+                      className={`mx-auto inline-flex min-w-[102px] items-center justify-center rounded-3xl border px-4 py-1 ${
                         row.status === "Passed"
                           ? "border-[#16a34a] bg-[#f8fafc] text-[#16a34a]"
                           : row.status === "Failed"

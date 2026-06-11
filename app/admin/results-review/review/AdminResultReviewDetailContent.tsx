@@ -245,6 +245,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshingAfterSave, setIsRefreshingAfterSave] = useState(false);
+  const [isDecisionEditMode, setIsDecisionEditMode] = useState(true);
   const [isProfileViewOpen, setIsProfileViewOpen] = useState(false);
   const [codingReviews, setCodingReviews] = useState<CodingReviewDraft[]>([]);
   const [sectionReviews, setSectionReviews] = useState<SectionReviewDraft[]>([]);
@@ -253,6 +254,8 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
   const submissionError = resolvedSubmissionId ? "" : "No submission found.";
 
   const decisions: Decision[] = ["Passed", "Failed", "Shortlisted", "On Hold"];
+  const hasSavedDecision = Boolean(detail?.review?.decision);
+  const canEditDecision = !hasSavedDecision || isDecisionEditMode;
   const hasAssessmentRows = Boolean(detail?.sectionRows?.length);
   const hasCodingRows = Boolean(detail?.codingRows?.length);
   const tabs = useMemo<{ id: ReviewTab; label: string }[]>(
@@ -326,6 +329,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
         setDecision(response.submission.review.decision);
       }
       setComment(response.submission.review?.comment || "");
+      setIsDecisionEditMode(!response.submission.review?.decision);
       setError("");
     },
     [token]
@@ -546,6 +550,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
         })),
       });
       setSaveMessage(response.message || "Review decision saved");
+      setIsDecisionEditMode(false);
       await loadSubmissionDetail(resolvedSubmissionId);
       setIsRefreshingAfterSave(true);
       router.refresh();
@@ -558,6 +563,15 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function handleDecisionAction() {
+    if (hasSavedDecision && !isDecisionEditMode) {
+      setSaveMessage("");
+      setIsDecisionEditMode(true);
+      return;
+    }
+    await handleSaveDecision();
   }
 
   return (
@@ -677,7 +691,11 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                       <button
                         key={item}
                         type="button"
-                        onClick={() => setDecision(item)}
+                        onClick={() => {
+                          if (!canEditDecision) return;
+                          setDecision(item);
+                        }}
+                        disabled={!canEditDecision}
                         className={`h-[42px] rounded-[8px] px-6 text-[18px] [zoom:0.84] transition ${
                           decision === item
                             ? item === "Passed"
@@ -686,7 +704,7 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                             : isDark
                               ? "bg-slate-800 text-slate-200"
                               : "bg-[#f3f4f6] text-[#0f172a]"
-                        }`}
+                        } ${!canEditDecision ? "cursor-not-allowed opacity-60" : ""}`}
                       >
                         {item}
                       </button>
@@ -698,13 +716,17 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                   <h4 className={`text-[18px] font-medium [zoom:0.84] ${isDark ? "text-slate-100" : "text-[#0f172a]"}`}>Comments</h4>
                   <textarea
                     value={comment}
-                    onChange={(event) => setComment(event.target.value)}
+                    onChange={(event) => {
+                      if (!canEditDecision) return;
+                      setComment(event.target.value);
+                    }}
                     placeholder="Add any notes or comments..."
+                    disabled={!canEditDecision}
                     className={`h-[164px] w-full rounded-[8px] border p-3 text-[18px] tracking-[-0.27px] [zoom:0.84] outline-none ${
                       isDark
                         ? "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-400"
                         : "border-[#e2e8f0] bg-white text-[#0f172a] placeholder:text-[#9ca3af]"
-                    }`}
+                    } ${!canEditDecision ? "cursor-not-allowed opacity-70" : ""}`}
                   />
                   <div className="mt-3 flex items-center justify-end gap-3">
                     {saveMessage ? (
@@ -712,8 +734,8 @@ export function AdminResultReviewDetailScreen({ submissionId, initialThemeDark =
                         {saveMessage}
                       </p>
                     ) : null}
-                    <AppButton variant="primary" onClick={handleSaveDecision} disabled={isSaving || !detail}>
-                      {isSaving ? "Saving..." : "Save Decision"}
+                    <AppButton variant="primary" onClick={handleDecisionAction} disabled={isSaving || !detail}>
+                      {isSaving ? "Saving..." : hasSavedDecision ? (isDecisionEditMode ? "Save Decision" : "Change Decision") : "Save Decision"}
                     </AppButton>
                   </div>
                 </section>

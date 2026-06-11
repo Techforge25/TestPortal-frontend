@@ -99,10 +99,6 @@ const requiredFields: Array<{ key: keyof FormState; label: string }> = [
   { key: "dateOfBirth", label: "Date of Birth" },
   { key: "positionAppliedFor", label: "Position Applied For" },
   { key: "residentialAddress", label: "Residential Address" },
-  { key: "startDate", label: "Start Date" },
-  { key: "endDate", label: "End Date" },
-  { key: "currentSalary", label: "Current Salary" },
-  { key: "expectedSalary", label: "Expected Salary" },
   { key: "expectedJoiningDate", label: "Expected Date of Joining" },
   { key: "shiftComfortable", label: "Comfortable with 9 AM-6 PM shift?" },
 ];
@@ -174,10 +170,6 @@ function sanitizePositionField(value: string) {
   return value.replace(/[^a-zA-Z0-9\s.,()+\-_/]/g, "").replace(/\s{2,}/g, " ");
 }
 
-function sanitizeSalaryField(value: string) {
-  return value.replace(/[^0-9,\s.]/g, "").replace(/\s{2,}/g, " ").trimStart();
-}
-
 function isRemoteOrWorkFromHomeTest(value: string) {
   return /\b(remote|work\s*from\s*home|wfh|home\s*based)\b/i.test(value);
 }
@@ -205,7 +197,7 @@ function formatCnic(value: string) {
   return `${first}-${second}-${third}`;
 }
 
-const dateFieldKeys: Array<keyof FormState> = ["dateOfBirth", "startDate", "endDate", "expectedJoiningDate"];
+const dateFieldKeys: Array<keyof FormState> = ["dateOfBirth", "expectedJoiningDate"];
 
 function formatDateInput(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -623,10 +615,10 @@ export function CandidateRegistrationScreen() {
             prefill.candidateProfile?.residentialAddress || prev.residentialAddress,
           workExperience: prefill.candidateProfile?.workExperience || prev.workExperience,
           designation: prefill.candidateProfile?.designation || prev.designation,
-          startDate: normalizeDateForInput(prefill.candidateProfile?.startDate || prev.startDate),
-          endDate: normalizeDateForInput(prefill.candidateProfile?.endDate || prev.endDate),
-          currentSalary: prefill.candidateProfile?.currentSalary || prev.currentSalary,
-          expectedSalary: prefill.candidateProfile?.expectedSalary || prev.expectedSalary,
+          // startDate: normalizeDateForInput(prefill.candidateProfile?.startDate || prev.startDate),
+          // endDate: normalizeDateForInput(prefill.candidateProfile?.endDate || prev.endDate),
+          // currentSalary: prefill.candidateProfile?.currentSalary || prev.currentSalary,
+          // expectedSalary: prefill.candidateProfile?.expectedSalary || prev.expectedSalary,
           expectedJoiningDate:
             normalizeDateForInput(prefill.candidateProfile?.expectedJoiningDate || prev.expectedJoiningDate),
           shiftComfortable:
@@ -665,10 +657,6 @@ function setValue(key: keyof FormState, value: string) {
       setForm((prev) => ({ ...prev, [key]: formatCnic(value) }));
       return;
     }
-    if (key === "currentSalary" || key === "expectedSalary") {
-      setForm((prev) => ({ ...prev, [key]: sanitizeSalaryField(value) }));
-      return;
-    }
     if (dateFieldKeys.includes(key)) {
       setForm((prev) => ({ ...prev, [key]: formatDateInput(value) }));
       return;
@@ -704,15 +692,8 @@ function setValue(key: keyof FormState, value: string) {
       nextFieldErrors.residentialAddress =
         "Residential Address must be a Pakistani address unless this is a remote or permanent work-from-home role.";
     }
-    // if (!/^[0-9\s,.]+$/.test(form.currentSalary.trim())) {
-    //   nextFieldErrors.currentSalary = "Current Salary must contain only numbers.";
-    //   setFieldErrors(nextFieldErrors);
-    //   setError("");
-    //   return;
-    // }
-    if (!/^[0-9\s,.]+$/.test(form.expectedSalary.trim())) {
-      nextFieldErrors.expectedSalary = "Expected Salary must contain only numbers.";
-    }
+    // Current Salary / Expected Salary fields are hidden on this form,
+    // so their validation is intentionally disabled here.
     if (!["Single", "Married"].includes(form.maritalStatus)) {
       nextFieldErrors.maritalStatus = "Please select Marital Status.";
     }
@@ -771,10 +752,10 @@ function setValue(key: keyof FormState, value: string) {
           residentialAddress: form.residentialAddress,
           workExperience: form.workExperience,
           designation: form.designation.trim(),
-          startDate: normalizeDateForApi(form.startDate),
-          endDate: normalizeDateForApi(form.endDate),
-          currentSalary: form.currentSalary.trim(),
-          expectedSalary: form.expectedSalary.trim(),
+          startDate: "",
+          endDate: "",
+          currentSalary: "",
+          expectedSalary: "",
           expectedJoiningDate: normalizeDateForApi(form.expectedJoiningDate),
           shiftComfortable: form.shiftComfortable,
         },
